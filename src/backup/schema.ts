@@ -1,0 +1,76 @@
+import type { Note, Rating, Settings, Tag } from '../db/types';
+import { cleanNote } from '../db/notes';
+
+export const APP_ID = 'plekboek';
+export const SCHEMA_VERSION = 1;
+
+export type BackupSettings = Pick<Settings, 'language' | 'theme' | 'samePlaceRadiusM' | 'backupReminderDays' | 'defaultMapCenter'>;
+
+export interface BackupFile {
+  app: typeof APP_ID;
+  schemaVersion: number;
+  exportedAt: string;
+  tags: Tag[];
+  notes: Note[];
+  settings: BackupSettings;
+}
+
+type Raw = Record<string, unknown>;
+
+const isObj = (v: unknown): v is Raw => typeof v === 'object' && v !== null && !Array.isArray(v);
+const isStr = (v: unknown): v is string => typeof v === 'string';
+const isNum = (v: unknown): v is number => typeof v === 'number' && Number.isFinite(v);
+const isIso = (v: unknown): v is string => isStr(v) && !Number.isNaN(Date.parse(v));
+const optStr = (v: unknown) => v === undefined || v === null || isStr(v);
+
+export function validateTag(raw: unknown): Tag | null {
+  if (!isObj(raw)) return null;
+  const { id, name, color, createdAt, updatedAt } = raw;
+  if (!isStr(id) || !id || !isStr(name) || !name.trim()) return null;
+  if (!isStr(color) || !/^#[0-9a-f]{6}$/i.test(color)) return null;
+  if (!isIso(createdAt) || !isIso(updatedAt)) return null;
+  return { id, name: name.trim(), color, createdAt, updatedAt };
+}
+
+/** Valideert en schoont een notitie op; `text` gaat door DOMPurify en `textPlain` wordt opnieuw berekend. */
+export function validateNote(raw: unknown): Note | null {
+  if (!isObj(raw)) return null;
+  const { id, lat, lng, accuracy, locationSource, observedAt, title, text, tagId, rating, createdAt, updatedAt } = raw;
+  if (!isStr(id) || !id) return null;
+  if (!isNum(lat) || lat < -90 || lat > 90 || !isNum(lng) || lng < -180 || lng > 180) return null;
+  if (accuracy !== undefined && accuracy !== null && (!isNum(accuracy) || accuracy < 0)) return null;
+  if (locationSource !== 'gps' && locationSource !== 'map') return null;
+  if (!isIso(observedAt) || !isIso(createdAt) || !isIso(updatedAt)) return null;
+  if (!optStr(title) || !isStr(text ?? '') || !optStr(tagId)) return null;
+  if (rating !== null && rating !== undefined && !(Number.isInteger(rating) && (rating as number) >= 1 && (rating as number) <= 5))
+    return null;
+  return cleanNote({
+    id,
+    lat,
+    lng,
+    ...(isNum(accuracy) && { accuracy }),
+    locationSource,
+    observedAt,
+    ...(isStr(title) && { title }),
+    text: (text as string | undefined) ?? '',
+    tagId: (tagId as string | null | undefined) || null,
+    rating: (rating as Rating | null | undefined) ?? null,
+    createdAt,
+    updatedAt,
+  });
+}
+
+export function validateSettings(raw: unknown): Partial<BackupSettings> {
+  if (!isObj(raw)) return {};
+  const out: Partial<BackupSettings> = {};
+  if (raw.language === 'nl' || raw.language === 'en' || raw.language === 'system') out.language = raw.language;
+  if (raw.theme === 'light' || raw.theme === 'dark' || raw.theme === 'system') out.theme = raw.theme;
+  if (isNum(raw.samePlaceRadiusM)) out.samePlaceRadiusM = Math.min(500, Math.max(25, Math.round(raw.samePlaceRadiusM / 25) * 25));
+  if (isNum(raw.backupReminderDays) && raw.backupReminderDays >= 0) out.backupReminderDays = Math.round(raw.backupReminderDays);
+  const c = raw.defaultMapCenter;
+  if (isObj(c) && isNum(c.lat) && isNum(c.lng) && isNum(c.zoom)) out.defaultMapCenter = { lat: c.lat, lng: c.lng, zoom: c.zoom };
+  return out;
+}
+
+/** Migraties van oudere schemaversies naar de huidige; sleutel = versie waar vandaan. */
+export const MIGRATIONS: Record<number, (data: Raw) => Raw> = {};
