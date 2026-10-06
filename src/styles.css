@@ -291,6 +291,52 @@ p {
   font-size: 0.85rem;
   font-weight: 600;
 }
+.sync-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--accent);
+}
+.sync-action {
+  min-height: 32px;
+  padding: 2px 10px;
+  border: 1px solid var(--accent);
+  border-radius: 999px;
+  background: var(--accent-soft);
+  font-size: 0.85rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.sync-action.error {
+  color: var(--warn-text);
+  background: var(--warn-bg);
+  border-color: transparent;
+}
+.spin {
+  animation: spin 1s linear infinite;
+}
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+.ellipsis {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.manual-backup summary {
+  cursor: pointer;
+  color: var(--accent);
+  font-weight: 600;
+  padding: 4px 0;
+}
+.manual-backup[open] {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
 .offline-badge .dot {
   width: 7px;
   height: 7px;

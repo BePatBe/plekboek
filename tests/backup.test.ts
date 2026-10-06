@@ -92,15 +92,15 @@ describe('import', () => {
     const backup = await buildBackup();
 
     // Ander toestel: dezelfde tagnaam met een ander id, één nieuwere en één oudere wijziging, één nieuwe notitie.
-    const otherVogels = { ...vogels, id: 'ander-id', name: 'vogels' };
+    const otherVogels = { ...vogels, id: 'zzz-ander-id', name: 'vogels' };
     const [n0, n1] = backup.notes;
     const file = {
       ...backup,
       tags: [otherVogels, { ...vogels, id: 'nieuw-tag', name: 'Bos', color: '#4f8a2b' }],
       notes: [
-        { ...n0, title: 'Nieuwer', updatedAt: '2099-01-01T00:00:00+00:00', tagId: 'ander-id' },
+        { ...n0, title: 'Nieuwer', updatedAt: '2099-01-01T00:00:00+00:00', tagId: 'zzz-ander-id' },
         { ...n1, title: 'Ouder', updatedAt: '2000-01-01T00:00:00+00:00' },
-        { ...n0, id: 'nieuwe-notitie', tagId: 'ander-id' },
+        { ...n0, id: 'nieuwe-notitie', tagId: 'zzz-ander-id' },
       ],
       settings: { ...backup.settings, theme: 'light' },
     };

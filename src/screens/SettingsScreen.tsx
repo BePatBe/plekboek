@@ -8,10 +8,11 @@ import { db } from '../db/db';
 import { fmtBytes, fmtNumber, fmtObserved, t, tn, useLang } from '../i18n';
 import { useStore } from '../lib/store';
 import { daysSince, toLocalIso } from '../lib/time';
-import { installedStore, installPromptStore, isIOS, promptInstall, replaceSettings, settingsStore, updateSettings } from '../state';
+import { installedStore, installPromptStore, isIOS, onlineStore, promptInstall, replaceSettings, settingsStore, updateSettings } from '../state';
 import { Header, Modal, Section, Segmented, Toast } from '../components/common';
 import { Icon } from '../components/Icon';
 import { IosInstallSteps } from '../components/InstallHelp';
+import { connectDrive, disconnectDrive, driveConfigured, syncNow, syncStore } from '../sync/manager';
 
 export function SettingsScreen() {
   useLang();
@@ -75,7 +76,26 @@ export function SettingsScreen() {
         </Section>
 
         <Section title={t('settings.backup')}>
-          <Backup settings={s} onToast={setToast} />
+          <Segmented<Settings['syncMethod']>
+            label={t('sync.method')}
+            value={s.syncMethod}
+            onChange={(syncMethod) => updateSettings({ syncMethod })}
+            options={[
+              { value: 'file', label: t('sync.methodFile') },
+              { value: 'gdrive', label: 'Google Drive' },
+            ]}
+          />
+          {s.syncMethod === 'file' ? (
+            <Backup settings={s} onToast={setToast} />
+          ) : (
+            <>
+              <DriveSync settings={s} onToast={setToast} />
+              <details class="manual-backup">
+                <summary>{t('sync.manualBackup')}</summary>
+                <Backup settings={s} onToast={setToast} reminder={false} />
+              </details>
+            </>
+          )}
         </Section>
 
         <Section title={t('settings.offlineMap')}>
@@ -246,7 +266,89 @@ function DeleteTagDialog({ tag, tags, count, onClose }: { tag: Tag; tags: Tag[];
 
 const REMINDER_OPTIONS = [0, 7, 14, 30, 60, 90];
 
-function Backup({ settings, onToast }: { settings: Settings; onToast: (m: string) => void }) {
+/* ---------- Google Drive ---------- */
+
+function DriveSync({ settings, onToast }: { settings: Settings; onToast: (m: string) => void }) {
+  const status = useStore(syncStore);
+  const online = useStore(onlineStore);
+  const [busy, setBusy] = useState(false);
+
+  if (!driveConfigured()) return <p class="banner banner-warn">{t('sync.notConfigured')}</p>;
+
+  const connect = async () => {
+    setBusy(true);
+    try {
+      await connectDrive();
+      onToast(t('sync.connected'));
+    } catch {
+      onToast(t('sync.connectFailed'));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  if (!settings.driveEmail) {
+    return (
+      <>
+        <p class="muted small">{t('sync.explain')}</p>
+        <button type="button" class="btn btn-primary btn-block" onClick={connect} disabled={busy || !online}>
+          <Icon name="refresh" size={18} /> {t('sync.connect')}
+        </button>
+        {!online && <p class="muted small">{t('sync.needsOnline')}</p>}
+      </>
+    );
+  }
+
+  const statusText =
+    status.state === 'syncing'
+      ? t('sync.syncing')
+      : status.state === 'needsAuth'
+        ? t('sync.needsAuth')
+        : status.state === 'offline'
+          ? t('sync.offline')
+          : status.state === 'error'
+            ? t('sync.error')
+            : settings.lastSyncAt
+              ? t('sync.last', { date: `${fmtObserved(settings.lastSyncAt, 'short')} ${fmtObserved(settings.lastSyncAt, 'time')}` })
+              : t('sync.never');
+  const pulled = status.state === 'idle' && status.last?.pulled;
+
+  return (
+    <>
+      <div class="kv">
+        <span>{t('sync.account')}</span>
+        <strong class="ellipsis">{settings.driveEmail}</strong>
+      </div>
+      <p class={`small ${status.state === 'error' || status.state === 'needsAuth' ? 'warn' : 'muted'}`} aria-live="polite">
+        {statusText}
+        {pulled && (pulled.added || pulled.updated || pulled.deleted)
+          ? ` · ${t('sync.pulled', { added: pulled.added, updated: pulled.updated, deleted: pulled.deleted })}`
+          : ''}
+      </p>
+      <div class="row gap stretch">
+        <button type="button" class="btn btn-primary" onClick={() => syncNow(true)} disabled={status.state === 'syncing' || !online}>
+          <Icon name="refresh" size={18} class={status.state === 'syncing' ? 'spin' : ''} /> {t('sync.now')}
+        </button>
+        <button
+          type="button"
+          class="btn"
+          onClick={async () => {
+            if (!confirm(t('sync.confirmDisconnect'))) return;
+            await disconnectDrive();
+            onToast(t('sync.disconnected'));
+          }}
+        >
+          {t('sync.disconnect')}
+        </button>
+      </div>
+      <p class="muted small">{t('sync.howItWorks')}</p>
+    </>
+  );
+}
+
+/* ---------- back-up via bestand ---------- */
+
+function Backup({ settings, onToast, reminder = true }: { settings: Settings; onToast: (m: string) => void; reminder?: boolean }) {
   const fileInput = useRef<HTMLInputElement>(null);
   const [pending, setPending] = useState<ParsedBackup | null>(null);
   const [parseError, setParseError] = useState('');
@@ -255,6 +357,7 @@ function Backup({ settings, onToast }: { settings: Settings; onToast: (m: string
   const noteCount = useLiveQuery(() => db.notes.count(), []) ?? 0;
 
   const overdue =
+    reminder &&
     settings.backupReminderDays > 0 &&
     noteCount > 0 &&
     (!settings.lastExportAt || daysSince(settings.lastExportAt) >= settings.backupReminderDays);
@@ -301,6 +404,7 @@ function Backup({ settings, onToast }: { settings: Settings; onToast: (m: string
           tn('backup.sumAdded', r.added),
           tn('backup.sumUpdated', r.updated),
           r.unchanged ? tn('backup.sumUnchanged', r.unchanged) : null,
+          r.deleted ? tn('backup.sumDeleted', r.deleted) : null,
           tn('backup.sumSkipped', r.skipped),
         ]
           .filter(Boolean)

@@ -403,9 +403,11 @@ function Banners({ notes }: { notes: Note[] | undefined }) {
     setDismissed(true);
   };
 
+  // Met Google Drive telt een geslaagde synchronisatie als back-up.
+  const lastBackup = settings.syncMethod === 'gdrive' && settings.driveEmail ? settings.lastSyncAt : settings.lastExportAt;
   let backupDays: number | null = null;
   if (settings.backupReminderDays > 0 && notes?.length && !backupDismissed) {
-    const since = settings.lastExportAt ?? notes.reduce((min, n) => (n.createdAt < min ? n.createdAt : min), notes[0].createdAt);
+    const since = lastBackup ?? notes.reduce((min, n) => (n.createdAt < min ? n.createdAt : min), notes[0].createdAt);
     const days = daysSince(since);
     if (days >= settings.backupReminderDays) backupDays = days;
   }
@@ -439,7 +441,7 @@ function Banners({ notes }: { notes: Note[] | undefined }) {
       {backupDays !== null && (
         <div class="banner banner-warn">
           <div class="row between gap">
-            <span>{settings.lastExportAt ? t('backup.reminder', { days: backupDays }) : t('backup.reminderNever')}</span>
+            <span>{lastBackup ? t('backup.reminder', { days: backupDays }) : t('backup.reminderNever')}</span>
             <a class="btn" href="#/settings" onClick={(e) => (e.preventDefault(), navigate('#/settings'))}>
               {t('backup.export')}
             </a>

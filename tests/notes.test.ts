@@ -112,7 +112,7 @@ describe('zoeken en sorteren', () => {
 describe('instellingen', () => {
   it('heeft standaardwaarden en bewaart wijzigingen', async () => {
     const s = await loadSettings();
-    expect(s).toEqual({ language: 'system', theme: 'system', samePlaceRadiusM: 100, backupReminderDays: 30 });
+    expect(s).toEqual({ language: 'system', theme: 'system', samePlaceRadiusM: 100, backupReminderDays: 30, syncMethod: 'file' });
     await saveSettings({ ...s, theme: 'dark' });
     expect((await loadSettings()).theme).toBe('dark');
   });

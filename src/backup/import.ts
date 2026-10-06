@@ -1,13 +1,24 @@
 import { db } from '../db/db';
 import { loadSettings } from '../db/settings';
-import type { Note, Settings, Tag } from '../db/types';
-import { APP_ID, MIGRATIONS, SCHEMA_VERSION, validateNote, validateSettings, validateTag, type BackupSettings } from './schema';
+import type { Deletion, Note, Settings, Tag } from '../db/types';
+import { toLocalIso } from '../lib/time';
+import {
+  APP_ID,
+  MIGRATIONS,
+  SCHEMA_VERSION,
+  validateDeletion,
+  validateNote,
+  validateSettings,
+  validateTag,
+  type BackupSettings,
+} from './schema';
 
 export type ParseError = 'invalidJson' | 'notPlekboek' | 'newerVersion';
 
 export interface ParsedBackup {
   tags: Tag[];
   notes: Note[];
+  deletions: Deletion[];
   settings: Partial<BackupSettings>;
   /** aantal ongeldige records (notities + tags) dat wordt overgeslagen */
   invalid: number;
@@ -31,13 +42,16 @@ export function parseBackup(json: string): { ok: true; data: ParsedBackup } | { 
 
   const rawTags = Array.isArray(data.tags) ? data.tags : [];
   const rawNotes = Array.isArray(data.notes) ? data.notes : [];
+  const rawDeletions = Array.isArray(data.deletions) ? data.deletions : [];
   const tags = rawTags.map(validateTag).filter((t): t is Tag => t !== null);
   const notes = rawNotes.map(validateNote).filter((n): n is Note => n !== null);
+  const deletions = rawDeletions.map(validateDeletion).filter((d): d is Deletion => d !== null);
   return {
     ok: true,
     data: {
       tags,
       notes,
+      deletions,
       settings: validateSettings(data.settings),
       invalid: rawTags.length - tags.length + (rawNotes.length - notes.length),
     },
@@ -50,30 +64,73 @@ export interface ImportSummary {
   added: number;
   updated: number;
   unchanged: number;
+  /** lokaal verwijderd omdat ze elders zijn verwijderd */
+  deleted: number;
   skipped: number;
   tagsAdded: number;
   /** nieuwe instellingen (alleen bij vervangen), zodat de app ze direct kan toepassen */
   settings: Settings | null;
 }
 
-const newer = (a: { updatedAt: string }, b: { updatedAt: string }) => Date.parse(a.updatedAt) > Date.parse(b.updatedAt);
+const ms = (iso: string) => Date.parse(iso);
+const newer = (a: { updatedAt: string }, b: { updatedAt: string }) => ms(a.updatedAt) > ms(b.updatedAt);
 const key = (name: string) => name.toLocaleLowerCase();
 
+/**
+ * Samenvoegen (ook gebruikt door de synchronisatie):
+ * - notities en tags: match op id, de nieuwste `updatedAt` wint;
+ * - verwijderingen: een record verdwijnt als het niet ná de verwijdering is gewijzigd;
+ * - tags met dezelfde naam en een ander id: de tag met het kleinste id wint, op elk toestel,
+ *   zodat toestellen na synchroniseren dezelfde tags hebben.
+ * Vervangen: eerst alles wissen, dan hetzelfde in één transactie (alles of niets).
+ */
 export async function applyImport(data: ParsedBackup, mode: ImportMode): Promise<ImportSummary> {
-  return db.transaction('rw', db.notes, db.tags, db.settings, async () => {
-    const summary: ImportSummary = { added: 0, updated: 0, unchanged: 0, skipped: data.invalid, tagsAdded: 0, settings: null };
+  return db.transaction('rw', [db.notes, db.tags, db.deletions, db.settings], async () => {
+    const summary: ImportSummary = { added: 0, updated: 0, unchanged: 0, deleted: 0, skipped: data.invalid, tagsAdded: 0, settings: null };
+    const now = toLocalIso();
 
     if (mode === 'replace') {
-      await Promise.all([db.notes.clear(), db.tags.clear()]);
+      await Promise.all([db.notes.clear(), db.tags.clear(), db.deletions.clear()]);
     }
 
-    // --- tags: match op id; zelfde naam met ander id = samenvoegen ---
+    // --- verwijderingen ---
+    const dels = new Map((await db.deletions.toArray()).map((d) => [d.id, d]));
+    for (const d of data.deletions) {
+      const known = dels.get(d.id);
+      if (!known || ms(d.deletedAt) > ms(known.deletedAt)) {
+        dels.set(d.id, d);
+        await db.deletions.put(d);
+      }
+    }
+    /** Is dit record door een verwijdering ingehaald? */
+    const gone = (r: { id: string; updatedAt: string }) => {
+      const d = dels.get(r.id);
+      return !!d && ms(d.deletedAt) >= ms(r.updatedAt);
+    };
+    /** Een record dat ná de verwijdering is gewijzigd, leeft weer: tombstone weg. */
+    const revive = async (id: string) => {
+      if (dels.delete(id)) await db.deletions.delete(id);
+    };
+
+    for (const d of data.deletions) {
+      const table = d.kind === 'note' ? db.notes : db.tags;
+      const local = await table.get(d.id);
+      if (!local) continue;
+      if (gone(local)) {
+        await table.delete(d.id);
+        if (d.kind === 'note') summary.deleted++;
+      } else await revive(d.id);
+    }
+
+    // --- tags ---
     const existing = await db.tags.toArray();
     const byId = new Map(existing.map((t) => [t.id, t]));
     const byName = new Map(existing.map((t) => [key(t.name), t]));
     const tagMap = new Map<string, string>(); // geïmporteerd id → id in de database
 
     for (const t of data.tags) {
+      if (gone(t)) continue;
+      await revive(t.id);
       const sameId = byId.get(t.id);
       if (sameId) {
         tagMap.set(t.id, t.id);
@@ -88,21 +145,31 @@ export async function applyImport(data: ParsedBackup, mode: ImportMode): Promise
         continue;
       }
       const sameName = byName.get(key(t.name));
-      if (sameName) {
+      if (sameName && sameName.id < t.id) {
         tagMap.set(t.id, sameName.id);
         continue;
       }
+      if (sameName) {
+        // De binnenkomende tag wint: lokale notities verhuizen, de lokale tag verdwijnt.
+        await db.tags.delete(sameName.id);
+        await db.deletions.put({ id: sameName.id, kind: 'tag', deletedAt: now });
+        dels.set(sameName.id, { id: sameName.id, kind: 'tag', deletedAt: now });
+        await db.notes.where('tagId').equals(sameName.id).modify({ tagId: t.id, updatedAt: now });
+        byId.delete(sameName.id);
+        tagMap.set(sameName.id, t.id);
+      } else summary.tagsAdded++;
       await db.tags.add(t);
       byId.set(t.id, t);
       byName.set(key(t.name), t);
       tagMap.set(t.id, t.id);
-      summary.tagsAdded++;
     }
 
-    // --- notities: match op id; bij conflict wint de nieuwste updatedAt ---
-    const current = await db.notes.bulkGet(data.notes.map((n) => n.id));
+    // --- notities ---
+    const incoming = data.notes.filter((n) => !gone(n));
+    const current = await db.notes.bulkGet(incoming.map((n) => n.id));
     const toPut: Note[] = [];
-    data.notes.forEach((raw, i) => {
+    for (const [i, raw] of incoming.entries()) {
+      await revive(raw.id);
       const tagId = raw.tagId ? tagMap.get(raw.tagId) ?? (byId.has(raw.tagId) ? raw.tagId : null) : null;
       const note = { ...raw, tagId };
       const old = current[i];
@@ -113,8 +180,11 @@ export async function applyImport(data: ParsedBackup, mode: ImportMode): Promise
         toPut.push(note);
         summary.updated++;
       } else summary.unchanged++;
-    });
+    }
     await db.notes.bulkPut(toPut);
+
+    // Notities die naar een verdwenen tag wijzen, krijgen geen tag.
+    await db.notes.filter((n) => n.tagId !== null && !byId.has(n.tagId)).modify({ tagId: null });
 
     if (mode === 'replace') {
       const settings = { ...(await loadSettings()), ...data.settings };

@@ -4,14 +4,15 @@ import { toLocalIso } from '../lib/time';
 import { APP_ID, SCHEMA_VERSION, type BackupFile } from './schema';
 
 export async function buildBackup(now = new Date()): Promise<BackupFile> {
-  return db.transaction('r', db.notes, db.tags, db.settings, async () => {
-    const [tags, notes, s] = await Promise.all([db.tags.toArray(), db.notes.toArray(), loadSettings()]);
+  return db.transaction('r', db.notes, db.tags, db.deletions, db.settings, async () => {
+    const [tags, notes, deletions, s] = await Promise.all([db.tags.toArray(), db.notes.toArray(), db.deletions.toArray(), loadSettings()]);
     return {
       app: APP_ID,
       schemaVersion: SCHEMA_VERSION,
       exportedAt: toLocalIso(now),
       tags,
       notes,
+      deletions,
       settings: {
         language: s.language,
         theme: s.theme,

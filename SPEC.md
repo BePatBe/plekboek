@@ -13,13 +13,13 @@ Een gratis app voor de telefoon waarmee je aantekeningen koppelt aan een plek op
 | Draait op Android, iPhone en Windows-laptops (Chrome/Edge) | **Progressive Web App (PWA)**: je installeert hem via de browser op het startscherm (telefoon) of als app in Windows (laptop) |
 | Kost niets | Open-source libraries, OpenStreetMap-kaart, gratis hosting (GitHub Pages) |
 | Lokale database | IndexedDB in de browser, via Dexie.js |
-| Overzetten naar een nieuw toestel | Export naar een JSON-bestand en import van dat bestand |
+| Overzetten naar een nieuw toestel | Export naar een JSON-bestand en import van dat bestand, of automatisch synchroniseren via de eigen Google Drive (keuze in Instellingen, zie §5a) |
 | Offline bruikbaar | App-shell en data volledig offline; bekeken kaarttegels worden gecachet |
 | Talen | Nederlands en Engels, te kiezen in de instellingen (standaard: taal van het toestel) |
 | Weergave | Licht en donker, te kiezen in de instellingen (standaard: volgt het toestel) |
 | Foto's | Niet in v1, maar datamodel en exportformaat houden er rekening mee (zie §9) |
 
-**Geen backend, geen account, geen tracking.** Alle data blijft op het toestel.
+**Geen backend, geen account, geen tracking.** Alle data blijft op het toestel. Alleen wie zelf kiest voor Google Drive-synchronisatie, slaat een kopie op in een verborgen map van de eigen Drive.
 
 ---
 
@@ -42,7 +42,7 @@ Een gratis app voor de telefoon waarmee je aantekeningen koppelt aan een plek op
 - **GPS** (`navigator.geolocation`) werkt ook zonder internet, maar alleen als de app open is. Er is geen achtergrondtracking, en dat is ook niet nodig.
 - **Windows-laptop:**
   - **Locatie:** de meeste laptops hebben geen GPS. `navigator.geolocation` gebruikt dan de Windows-locatiedienst (positie via wifi, vaak 20–500 m nauwkeurig). Daarvoor moet Locatie aanstaan in Windows (Instellingen → Privacy en beveiliging → Locatie). Offline is er meestal geen positie. *Kies op kaart* is op de laptop dus de gewone manier. Is de nauwkeurigheid slechter dan `samePlaceRadiusM`, dan toont de app een waarschuwing met de suggestie om de plek op de kaart te kiezen.
-  - **Geen synchronisatie:** laptop en telefoon hebben elk hun eigen database. Overzetten gaat via export/import (§5).
+  - **Synchronisatie:** laptop en telefoon hebben elk hun eigen database. Overzetten gaat via export/import (§5) of via Google Drive (§5a).
   - **Firefox** werkt als website, maar installeren gaat alleen via Chrome/Edge.
 
 ### Installeren
@@ -98,6 +98,15 @@ interface Settings {       // één record, key 'settings'
   defaultMapCenter?: { lat: number; lng: number; zoom: number };
   lastExportAt?: string;
   backupReminderDays: number;   // standaard 30; 0 = uit
+  syncMethod: 'file' | 'gdrive'; // per toestel, standaard 'file'
+  driveEmail?: string;          // gekoppeld Google-account (alleen weergave)
+  lastSyncAt?: string;
+}
+
+interface Deletion {         // tombstone: onthoudt verwijderingen voor samenvoegen/synchroniseren
+  id: string;                // id van de verwijderde notitie of tag
+  kind: 'note' | 'tag';
+  deletedAt: string;
 }
 ```
 
@@ -108,6 +117,7 @@ db.version(1).stores({
   tags: 'id, &name',
   settings: 'key',
 });
+db.version(2).stores({ deletions: 'id, kind' });
 ```
 
 **Opmaak van `text`:** alleen deze HTML-tags zijn toegestaan, zonder attributen:
@@ -207,7 +217,8 @@ Tijdvakken: nacht 0–6 u, ochtend 6–12 u, middag 12–18 u, avond 18–24 u (
 - **Weergave:** Systeem / Licht / Donker. Een wijziging is direct zichtbaar, zonder herstart.
 - **Tags beheren:** een lijst met naam, kleur en aantal notities. Je kunt tags toevoegen, hernoemen, van kleur veranderen en verwijderen (zie de regel in §3).
 - **"Zelfde plek"-straal:** een schuifregelaar van 25 tot 500 m (stappen van 25 m, standaard 100 m), met de gekozen waarde ernaast. Notities binnen deze straal tellen als één plek (voor het titelvoorstel en de "beste moment"-analyse).
-- **Back-up:**
+- **Back-up en synchronisatie:** keuze *Bestand* of *Google Drive* (§5a). Bij Google Drive blijft de handmatige back-up beschikbaar onder een uitklapbaar kopje.
+- **Back-up via bestand:**
   - *Exporteren*: maakt een JSON-bestand (zie §5) en biedt het aan via de deelfunctie (Web Share API, zodat je het kunt opslaan in Bestanden, Drive, mail, enz.). Web Share werkt ook op Windows (Chrome/Edge). Als dat niet beschikbaar is, wordt het bestand gedownload (op de laptop naar de map Downloads).
   - *Importeren*: kies een bestand en kies daarna **Samenvoegen** of **Alles vervangen** (met bevestiging).
   - Toont "Laatste back-up: …" en een herinnering na `backupReminderDays` dagen.
@@ -250,7 +261,18 @@ Bestandsnaam: `plekboek-backup-YYYY-MM-DD.json`
 - `text` gaat altijd door DOMPurify met de whitelist uit §3; `textPlain` wordt opnieuw berekend en niet blind overgenomen.
 - **Samenvoegen:** match op `id`; bij een conflict wint de nieuwste `updatedAt`. Tags met dezelfde naam maar een ander `id` worden samengevoegd, en de `tagId` van de betrokken notities wordt omgezet.
 - **Vervangen:** alles wissen en dan importeren, in één Dexie-transactie (alles of niets).
+- **Verwijderingen:** het bestand bevat ook `deletions` (optioneel veld in versie 1; oudere bestanden zonder dat veld blijven geldig). Een record verdwijnt bij samenvoegen als het niet ná de verwijdering is gewijzigd; een later gewijzigd record blijft en de tombstone vervalt.
+- **Tags met dezelfde naam** en een ander `id`: de tag met het kleinste `id` wint, op elk toestel. Zo komen toestellen na synchroniseren op dezelfde tags uit.
 - Toon na afloop een samenvatting: "123 notities toegevoegd, 4 bijgewerkt, 1 overgeslagen".
+
+## 5a. Synchroniseren via Google Drive
+
+- **Opslag:** één bestand `plekboek-sync.json` (zelfde formaat als §5) in de verborgen `appDataFolder` van de eigen Google Drive. Scope `drive.appdata`: de app ziet geen andere bestanden.
+- **Inloggen:** Google Identity Services (token-model), geen eigen server. Een toegangstoken is ca. een uur geldig; daarna toont de kopbalk de knop *Nu synchroniseren* (één tik, Google-venster sluit meestal direct).
+- **Ronde:** bestand ophalen → samenvoegen in de lokale database (§5) → resultaat terugschrijven als er iets is veranderd. Heeft een ander toestel intussen geschreven (`version` van het bestand veranderd), dan begint de ronde opnieuw (max. 3 keer).
+- **Wanneer:** bij openen, bij terugkeren naar de app, bij weer online komen, en 3 s na elke lokale wijziging.
+- **Niet gesynchroniseerd:** instellingen (taal, weergave, straal) horen bij het toestel.
+- **Configuratie:** OAuth-client-ID (type webapplicatie) via `VITE_GOOGLE_CLIENT_ID`; bij GitHub Pages als repository-variabele `GOOGLE_CLIENT_ID`. Zonder ID toont de app dat Google Drive niet is ingesteld.
 
 ---
 

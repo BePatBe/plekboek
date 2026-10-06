@@ -32,7 +32,13 @@ export async function updateNote(id: string, input: NoteInput): Promise<Note> {
   return note;
 }
 
-export const deleteNote = (id: string) => db.notes.delete(id);
+/** Verwijdert een notitie en onthoudt dat (tombstone), zodat samenvoegen of synchroniseren hem niet terugzet. */
+export async function deleteNote(id: string): Promise<void> {
+  await db.transaction('rw', db.notes, db.deletions, async () => {
+    await db.notes.delete(id);
+    await db.deletions.put({ id, kind: 'note', deletedAt: toLocalIso() });
+  });
+}
 export const getNote = (id: string) => db.notes.get(id);
 export const allNotes = () => db.notes.toArray();
 

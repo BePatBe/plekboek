@@ -1,7 +1,8 @@
-import type { Note, Rating, Settings, Tag } from '../db/types';
+import type { Deletion, Note, Rating, Settings, Tag } from '../db/types';
 import { cleanNote } from '../db/notes';
 
 export const APP_ID = 'plekboek';
+/** `deletions` is een optionele toevoeging aan versie 1: oudere bestanden zonder dat veld blijven geldig. */
 export const SCHEMA_VERSION = 1;
 
 export type BackupSettings = Pick<Settings, 'language' | 'theme' | 'samePlaceRadiusM' | 'backupReminderDays' | 'defaultMapCenter'>;
@@ -12,6 +13,7 @@ export interface BackupFile {
   exportedAt: string;
   tags: Tag[];
   notes: Note[];
+  deletions: Deletion[];
   settings: BackupSettings;
 }
 
@@ -58,6 +60,13 @@ export function validateNote(raw: unknown): Note | null {
     createdAt,
     updatedAt,
   });
+}
+
+export function validateDeletion(raw: unknown): Deletion | null {
+  if (!isObj(raw)) return null;
+  const { id, kind, deletedAt } = raw;
+  if (!isStr(id) || !id || (kind !== 'note' && kind !== 'tag') || !isIso(deletedAt)) return null;
+  return { id, kind, deletedAt };
 }
 
 export function validateSettings(raw: unknown): Partial<BackupSettings> {

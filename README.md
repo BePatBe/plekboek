@@ -24,6 +24,19 @@ GPS en de service worker werken alleen via HTTPS of `localhost`. Om op een telef
 
 De app gebruikt een relatieve `base` en hash-routing, dus hij werkt op elk pad (`https://<gebruiker>.github.io/<repo>/`).
 
+## Google Drive-synchronisatie instellen (eenmalig)
+
+De app synchroniseert via een verborgen map in de eigen Google Drive van de gebruiker. Daarvoor heeft de app een OAuth-client-ID nodig:
+
+1. Ga naar [Google Cloud Console](https://console.cloud.google.com/) en maak een project (bijv. "Plekboek").
+2. **APIs & Services → Library:** zoek *Google Drive API* en klik *Enable*.
+3. **Google Auth Platform → Branding / Audience:** app-naam "Plekboek", je eigen e-mailadres als contact, type *External*. Laat de status op *Testing* en voeg onder *Test users* de Google-accounts toe die mogen synchroniseren.
+4. **Data access:** voeg de scope `https://www.googleapis.com/auth/drive.appdata` toe.
+5. **Clients → Create client:** type *Web application*. Bij *Authorized JavaScript origins*: `https://bepatbe.github.io` en (voor lokaal testen) `http://localhost:5173` en `http://localhost:4173`. Geen redirect-URI nodig.
+6. Kopieer het client-ID (`…apps.googleusercontent.com`) en zet het in GitHub onder **Settings → Secrets and variables → Actions → Variables** als `GOOGLE_CLIENT_ID`. Start daarna de workflow opnieuw.
+
+Lokaal: maak een bestand `.env.local` met `VITE_GOOGLE_CLIENT_ID=…`.
+
 ## Installeren
 
 - **Android (Chrome/Edge):** link openen → *App installeren* (of menu ⋮ → *App installeren*).

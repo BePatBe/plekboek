@@ -31,6 +31,11 @@ export interface Settings {
   defaultMapCenter?: { lat: number; lng: number; zoom: number };
   lastExportAt?: string;
   backupReminderDays: number;
+  /** Per toestel: back-up via een bestand, of automatisch synchroniseren met Google Drive. */
+  syncMethod: 'file' | 'gdrive';
+  /** Gekoppeld Google-account (alleen ter weergave); leeg = niet gekoppeld. */
+  driveEmail?: string;
+  lastSyncAt?: string;
 }
 
 export const DEFAULT_SETTINGS: Settings = {
@@ -38,7 +43,15 @@ export const DEFAULT_SETTINGS: Settings = {
   theme: 'system',
   samePlaceRadiusM: 100,
   backupReminderDays: 30,
+  syncMethod: 'file',
 };
+
+export interface Deletion {
+  /** id van de verwijderde notitie of tag */
+  id: string;
+  kind: 'note' | 'tag';
+  deletedAt: string;
+}
 
 /** Vast palet voor nieuwe tags; elke kleur werkt als marker op lichte én donkere kaart. */
 export const TAG_PALETTE = ['#2a7d6b', '#b8651d', '#7b4fc9', '#2266c4', '#c0392b', '#c99a06', '#4f8a2b', '#c2477e', '#5d6d7e', '#0e8fa3'];

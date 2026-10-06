@@ -2,6 +2,7 @@ import { render } from 'preact';
 import { registerSW } from 'virtual:pwa-register';
 import { App } from './app';
 import { initInstall, initSettings, requestPersistence } from './state';
+import { initSync } from './sync/manager';
 import './styles.css';
 
 async function start() {
@@ -10,6 +11,7 @@ async function start() {
   render(<App />, document.getElementById('app')!);
   requestPersistence();
   registerSW({ immediate: true });
+  initSync();
 }
 
 start();

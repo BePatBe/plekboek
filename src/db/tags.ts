@@ -48,9 +48,11 @@ export async function updateTag(id: string, changes: { name?: string; color?: st
 
 /** Verwijdert een tag; de notities krijgen geen tag (`moveTo` = null) of gaan naar een andere tag. */
 export async function deleteTag(id: string, moveTo: string | null): Promise<void> {
-  await db.transaction('rw', db.tags, db.notes, async () => {
-    await db.notes.where('tagId').equals(id).modify({ tagId: moveTo, updatedAt: toLocalIso() });
+  await db.transaction('rw', db.tags, db.notes, db.deletions, async () => {
+    const now = toLocalIso();
+    await db.notes.where('tagId').equals(id).modify({ tagId: moveTo, updatedAt: now });
     await db.tags.delete(id);
+    await db.deletions.put({ id, kind: 'tag', deletedAt: now });
   });
 }
 

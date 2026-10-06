@@ -6,6 +6,7 @@ import { navigate, type Route } from '../router';
 import { onlineStore } from '../state';
 import { useStore } from '../lib/store';
 import { Icon } from './Icon';
+import { syncNow, syncStore } from '../sync/manager';
 
 export function Stars({ rating, size = 'sm' }: { rating: Rating | null; size?: 'sm' | 'md' }) {
   useLang();
@@ -64,6 +65,27 @@ export function OfflineBadge() {
   );
 }
 
+/** Synchronisatiestatus in de kopbalk: draaiend icoon, of een knop als er een tik nodig is. */
+export function SyncBadge() {
+  useLang();
+  const status = useStore(syncStore);
+  if (status.state === 'syncing') {
+    return (
+      <span class="sync-badge" role="status" aria-label={t('sync.syncing')} title={t('sync.syncing')}>
+        <Icon name="refresh" size={18} class="spin" />
+      </span>
+    );
+  }
+  if (status.state === 'needsAuth' || status.state === 'error') {
+    return (
+      <button type="button" class={`sync-badge sync-action ${status.state}`} onClick={() => syncNow(true)}>
+        <Icon name="refresh" size={16} /> {t(status.state === 'error' ? 'sync.retry' : 'sync.now')}
+      </button>
+    );
+  }
+  return null;
+}
+
 export function Header({ title, left, right }: { title: ComponentChildren; left?: ComponentChildren; right?: ComponentChildren }) {
   return (
     <header class="topbar">
@@ -71,6 +93,7 @@ export function Header({ title, left, right }: { title: ComponentChildren; left?
       <h1 class="topbar-title">{title}</h1>
       <div class="topbar-right">
         <OfflineBadge />
+        <SyncBadge />
         {right}
       </div>
     </header>
