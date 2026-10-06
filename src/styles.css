@@ -1557,3 +1557,8 @@ input[type='range'] {
 .paste[open] summary {
   margin-bottom: 8px;
 }
+.tech {
+  margin-top: 6px;
+  font-family: ui-monospace, Consolas, monospace;
+  word-break: break-word;
+}

@@ -26,7 +26,7 @@ type Step =
   | { s: 'connecting' }
   | { s: 'transferring' }
   | { s: 'done'; summary: ImportSummary }
-  | { s: 'error'; reason: PeerError | 'unknown' };
+  | { s: 'error'; reason: PeerError | 'unknown'; details: string };
 
 export function SyncScreen() {
   useLang();
@@ -36,7 +36,12 @@ export function SyncScreen() {
 
   useEffect(() => () => peer.current?.close(), []);
 
-  const fail = (e: unknown) => setStep({ s: 'error', reason: e instanceof PeerFailure ? e.reason : 'unknown' });
+  const fail = (e: unknown) =>
+    setStep({
+      s: 'error',
+      reason: e instanceof PeerFailure ? e.reason : 'unknown',
+      details: e instanceof PeerFailure ? e.details : String(e),
+    });
 
   /** Uitwisselen zodra de verbinding er is (wacht op de achtergrond). */
   const run = (p: Peer) =>
@@ -115,7 +120,12 @@ export function SyncScreen() {
           </>
         )}
 
-        {step.s === 'preparing' && <Progress text={t('peer.preparing')} />}
+        {step.s === 'preparing' && (
+          <>
+            <Progress text={t('peer.preparing')} />
+            <p class="muted small">{t('peer.cameraWhy')}</p>
+          </>
+        )}
 
         {step.s === 'showOffer' && (
           <>
@@ -173,6 +183,12 @@ export function SyncScreen() {
         {step.s === 'error' && (
           <div class="card">
             <p class="error">{t(`peer.error.${step.reason}`)}</p>
+            {step.details && (
+              <details class="small muted">
+                <summary>{t('peer.details')}</summary>
+                <p class="tech">{step.details}</p>
+              </details>
+            )}
             <button type="button" class="btn btn-primary btn-block" onClick={restart}>
               {t('peer.tryAgain')}
             </button>

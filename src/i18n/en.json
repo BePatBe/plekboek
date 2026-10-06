@@ -215,6 +215,8 @@
   "peer.joinTitle": "Scan code",
   "peer.joinHint": "Choose this on the device with a rear camera, e.g. the phone.",
   "peer.privacy": "The devices connect directly. To find each other they use a public service (STUN) that only sees IP addresses, never your notes.",
+  "peer.cameraWhy": "PlaceLog may ask for the camera: it is needed for scanning and helps the devices find each other on the Wi-Fi network.",
+  "peer.details": "Technical details",
   "peer.preparing": "Creating code…",
   "peer.step1Host": "Scan this code with the other device (choose \"Scan code\" there).",
   "peer.qrLabel": "QR code for syncing",

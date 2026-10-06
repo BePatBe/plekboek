@@ -215,6 +215,8 @@
   "peer.joinTitle": "Code scannen",
   "peer.joinHint": "Kies dit op het toestel met een camera aan de achterkant, bijv. de telefoon.",
   "peer.privacy": "De toestellen maken een directe verbinding. Om elkaar te vinden gebruiken ze een openbare dienst (STUN) die alleen IP-adressen ziet, nooit je notities.",
+  "peer.cameraWhy": "Plekboek kan om de camera vragen: die is nodig om te scannen en helpt de toestellen elkaar op het wifi-netwerk te vinden.",
+  "peer.details": "Technische details",
   "peer.preparing": "Code maken…",
   "peer.step1Host": "Scan deze code met het andere toestel (kies daar \"Code scannen\").",
   "peer.qrLabel": "QR-code voor synchroniseren",
