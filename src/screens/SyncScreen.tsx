@@ -156,10 +156,16 @@ export function SyncScreen() {
             <StepLabel n={2} text={t('peer.step2Join')} />
             <QrCode value={step.code} label={t('peer.qrLabel')} />
             <Progress text={t('peer.waiting')} />
+            <LiveDetails peer={peer.current} />
           </>
         )}
 
-        {step.s === 'connecting' && <Progress text={t('peer.connecting')} />}
+        {step.s === 'connecting' && (
+          <>
+            <Progress text={t('peer.connecting')} />
+            <LiveDetails peer={peer.current} />
+          </>
+        )}
         {step.s === 'transferring' && <Progress text={t('peer.transferring')} />}
 
         {step.s === 'done' && (
@@ -210,6 +216,25 @@ function StepLabel({ n, text }: { n: number; text: string }) {
     <p class="step-label">
       <span class="step-n">{n}</span> {text}
     </p>
+  );
+}
+
+/** Technische details die live meelopen tijdens het verbinden (voor als het niet lukt). */
+function LiveDetails({ peer }: { peer: Peer | null }) {
+  const [text, setText] = useState('');
+  useEffect(() => {
+    if (!peer) return;
+    const tick = () => peer.diagnostics().then(setText);
+    tick();
+    const timer = setInterval(tick, 1000);
+    return () => clearInterval(timer);
+  }, [peer]);
+  if (!text) return null;
+  return (
+    <details class="small muted">
+      <summary>{t('peer.details')}</summary>
+      <p class="tech">{text}</p>
+    </details>
   );
 }
 
