@@ -102,6 +102,7 @@ export function SettingsScreen() {
             <ul class="small muted">
               <li>OpenStreetMap — kaartdata © OpenStreetMap-bijdragers, ODbL; Nominatim-geocoder</li>
               <li>Leaflet — BSD-2-Clause</li>
+              <li>ntfy.sh — doorgeefdienst voor synchroniseren (Apache-2.0 / GPL-2.0)</li>
               <li>Leaflet.markercluster — MIT</li>
               <li>Preact — MIT</li>
               <li>Dexie.js — Apache-2.0</li>

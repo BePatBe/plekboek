@@ -5,91 +5,74 @@ import { useStore } from '../lib/store';
 import { toLocalIso } from '../lib/time';
 import { goBack } from '../router';
 import { onlineStore, updateSettings } from '../state';
-import { Peer, PeerFailure, type PeerError } from '../sync/peer';
-import { PREFIX } from '../sync/signal';
+import { newSession, parseCode, PREFIX, RelayFailure, runHost, runJoin, type Progress, type RelayError, type Session } from '../sync/relay';
 import { Header } from '../components/common';
 import { Icon } from '../components/Icon';
 import { QrCode, QrScanner } from '../components/Qr';
 
 /**
- * Synchroniseren met een ander toestel via twee QR-codes:
- * toestel 1 toont een code → toestel 2 scant die en toont een antwoordcode → toestel 1 scant die.
- * Daarna een directe verbinding; beide toestellen wisselen alles uit en voegen samen.
+ * Synchroniseren met een ander toestel: toestel 1 toont een QR-code, toestel 2 scant hem.
+ * Daarna wisselen ze hun notities versleuteld uit via een doorgeefdienst (zie sync/relay.ts).
  */
 type Step =
   | { s: 'choose' }
-  | { s: 'preparing' }
-  | { s: 'showOffer'; code: string }
-  | { s: 'scanAnswer' }
-  | { s: 'scanOffer' }
-  | { s: 'showAnswer'; code: string }
-  | { s: 'connecting' }
-  | { s: 'transferring' }
+  | { s: 'showCode'; code: string; progress: Progress }
+  | { s: 'scan' }
+  | { s: 'working'; progress: Progress }
   | { s: 'done'; summary: ImportSummary }
-  | { s: 'error'; reason: PeerError | 'unknown'; details: string };
+  | { s: 'error'; reason: RelayError | 'unknown'; details: string };
 
 export function SyncScreen() {
   useLang();
   const [step, setStep] = useState<Step>({ s: 'choose' });
-  const peer = useRef<Peer | null>(null);
   const online = useStore(onlineStore);
+  /** Voorkomt dat een afgebroken poging later nog de stap verandert. */
+  const attempt = useRef(0);
 
-  useEffect(() => () => peer.current?.close(), []);
+  useEffect(() => () => void attempt.current++, []);
 
   const fail = (e: unknown) =>
     setStep({
       s: 'error',
-      reason: e instanceof PeerFailure ? e.reason : 'unknown',
-      details: e instanceof PeerFailure ? e.details : String(e),
+      reason: e instanceof RelayFailure ? e.reason : 'unknown',
+      details: e instanceof RelayFailure ? e.details : String(e),
     });
 
-  /** Uitwisselen zodra de verbinding er is (wacht op de achtergrond). */
-  const run = (p: Peer) =>
-    p
-      .exchange((progress) => progress === 'connected' && setStep({ s: 'transferring' }))
+  const run = (session: Session, role: 'host' | 'join', onProgress: (p: Progress) => void) => {
+    const id = ++attempt.current;
+    const alive = () => id === attempt.current;
+    (role === 'host' ? runHost : runJoin)(session, (p) => alive() && onProgress(p))
       .then(async (summary) => {
+        if (!alive()) return;
         await updateSettings({ lastSyncAt: toLocalIso() });
         setStep({ s: 'done', summary });
-        p.close();
       })
-      .catch(fail);
+      .catch((e) => alive() && fail(e));
+  };
 
   const host = async () => {
-    setStep({ s: 'preparing' });
-    try {
-      const { peer: p, code } = await Peer.host();
-      peer.current = p;
-      setStep({ s: 'showOffer', code });
-    } catch (e) {
-      fail(e);
-    }
+    const session = await newSession();
+    setStep({ s: 'showCode', code: session.code, progress: 'uploading' });
+    // De code blijft zichtbaar tot het andere toestel zijn notities heeft klaargezet.
+    run(session, 'host', (progress) =>
+      setStep((cur) =>
+        cur.s === 'showCode' && (progress === 'uploading' || progress === 'waiting') ? { ...cur, progress } : { s: 'working', progress },
+      ),
+    );
   };
 
-  const onAnswer = async (code: string) => {
-    setStep({ s: 'connecting' });
+  const onCode = async (code: string) => {
     try {
-      await peer.current!.accept(code);
-      run(peer.current!);
-    } catch (e) {
-      fail(e);
-    }
-  };
-
-  const onOffer = async (code: string) => {
-    setStep({ s: 'preparing' });
-    try {
-      const { peer: p, code: answer } = await Peer.join(code);
-      peer.current = p;
-      setStep({ s: 'showAnswer', code: answer });
-      run(p);
+      const session = await parseCode(code);
+      setStep({ s: 'working', progress: 'uploading' });
+      run(session, 'join', (progress) => setStep({ s: 'working', progress }));
     } catch (e) {
       fail(e);
     }
   };
 
   const restart = () => {
-    peer.current?.close();
-    peer.current = null;
+    attempt.current++;
     setStep({ s: 'choose' });
   };
 
@@ -108,11 +91,11 @@ export function SyncScreen() {
           <>
             <p>{t('peer.intro')}</p>
             {!online && <p class="banner banner-warn">{t('peer.offlineHint')}</p>}
-            <button type="button" class="choice card" onClick={host}>
+            <button type="button" class="choice card" onClick={host} disabled={!online}>
               <strong>{t('peer.hostTitle')}</strong>
               <span class="muted small">{t('peer.hostHint')}</span>
             </button>
-            <button type="button" class="choice card" onClick={() => setStep({ s: 'scanOffer' })}>
+            <button type="button" class="choice card" onClick={() => setStep({ s: 'scan' })} disabled={!online}>
               <strong>{t('peer.joinTitle')}</strong>
               <span class="muted small">{t('peer.joinHint')}</span>
             </button>
@@ -120,53 +103,22 @@ export function SyncScreen() {
           </>
         )}
 
-        {step.s === 'preparing' && (
+        {step.s === 'showCode' && (
           <>
-            <Progress text={t('peer.preparing')} />
-            <p class="muted small">{t('peer.cameraWhy')}</p>
-          </>
-        )}
-
-        {step.s === 'showOffer' && (
-          <>
-            <StepLabel n={1} text={t('peer.step1Host')} />
+            <p class="step-label">{t('peer.showCodeHint')}</p>
             <QrCode value={step.code} label={t('peer.qrLabel')} />
-            <button type="button" class="btn btn-primary btn-block" onClick={() => setStep({ s: 'scanAnswer' })}>
-              {t('peer.nextScanAnswer')}
-            </button>
+            <ProgressLine text={t(`peer.progress.${step.progress}`)} />
           </>
         )}
 
-        {step.s === 'scanAnswer' && (
+        {step.s === 'scan' && (
           <>
-            <StepLabel n={2} text={t('peer.step2Host')} />
-            <QrScanner prefix={`${PREFIX}|a|`} onCode={onAnswer} />
+            <p class="step-label">{t('peer.scanHint')}</p>
+            <QrScanner prefix={`${PREFIX}|`} onCode={onCode} />
           </>
         )}
 
-        {step.s === 'scanOffer' && (
-          <>
-            <StepLabel n={1} text={t('peer.step1Join')} />
-            <QrScanner prefix={`${PREFIX}|o|`} onCode={onOffer} />
-          </>
-        )}
-
-        {step.s === 'showAnswer' && (
-          <>
-            <StepLabel n={2} text={t('peer.step2Join')} />
-            <QrCode value={step.code} label={t('peer.qrLabel')} />
-            <Progress text={t('peer.waiting')} />
-            <LiveDetails peer={peer.current} />
-          </>
-        )}
-
-        {step.s === 'connecting' && (
-          <>
-            <Progress text={t('peer.connecting')} />
-            <LiveDetails peer={peer.current} />
-          </>
-        )}
-        {step.s === 'transferring' && <Progress text={t('peer.transferring')} />}
+        {step.s === 'working' && <ProgressLine text={t(`peer.progress.${step.progress}`)} />}
 
         {step.s === 'done' && (
           <div class="card center">
@@ -201,7 +153,7 @@ export function SyncScreen() {
           </div>
         )}
 
-        {step.s !== 'choose' && step.s !== 'done' && step.s !== 'error' && (
+        {(step.s === 'showCode' || step.s === 'scan' || step.s === 'working') && (
           <button type="button" class="link" onClick={restart}>
             {t('peer.startOver')}
           </button>
@@ -211,34 +163,7 @@ export function SyncScreen() {
   );
 }
 
-function StepLabel({ n, text }: { n: number; text: string }) {
-  return (
-    <p class="step-label">
-      <span class="step-n">{n}</span> {text}
-    </p>
-  );
-}
-
-/** Technische details die live meelopen tijdens het verbinden (voor als het niet lukt). */
-function LiveDetails({ peer }: { peer: Peer | null }) {
-  const [text, setText] = useState('');
-  useEffect(() => {
-    if (!peer) return;
-    const tick = () => peer.diagnostics().then(setText);
-    tick();
-    const timer = setInterval(tick, 1000);
-    return () => clearInterval(timer);
-  }, [peer]);
-  if (!text) return null;
-  return (
-    <details class="small muted">
-      <summary>{t('peer.details')}</summary>
-      <p class="tech">{text}</p>
-    </details>
-  );
-}
-
-function Progress({ text }: { text: string }) {
+function ProgressLine({ text }: { text: string }) {
   return (
     <p class="progress" role="status">
       <Icon name="refresh" size={20} class="spin accent" /> {text}

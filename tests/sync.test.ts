@@ -6,7 +6,7 @@ import { buildBackup } from '../src/backup/export';
 import { applyImport, parseBackup } from '../src/backup/import';
 import type { BackupFile } from '../src/backup/schema';
 import type { Note, Tag } from '../src/db/types';
-import { BadCode, decode, encode, fromSdp, toSdp, type Signal } from '../src/sync/signal';
+import { newSession, open, parseCode, seal } from '../src/sync/relay';
 import { input, resetDb } from './helpers';
 
 beforeEach(resetDb);
@@ -135,63 +135,47 @@ describe('samenvoegen tussen toestellen', () => {
   });
 });
 
-describe('verbindingscode (QR)', () => {
-  // Echte SDP van Chrome (afgekort tot wat ertoe doet, plus regels die we moeten negeren)
-  const sdp = [
-    'v=0',
-    'o=- 123 2 IN IP4 127.0.0.1',
-    's=-',
-    't=0 0',
-    'a=group:BUNDLE 0',
-    'a=extmap-allow-mixed',
-    'a=msid-semantic: WMS',
-    'm=application 9 UDP/DTLS/SCTP webrtc-datachannel',
-    'c=IN IP4 0.0.0.0',
-    'a=candidate:3891245637 1 udp 2113937151 9f3c1a2b-1111-4c2d-9e7f-0123456789ab.local 54321 typ host generation 0 network-cost 999',
-    'a=candidate:842163049 1 udp 1677729535 84.85.86.87 61234 typ srflx raddr 0.0.0.0 rport 0 generation 0 network-cost 999',
-    'a=candidate:1 1 tcp 1518280447 192.168.1.5 9 typ host tcptype active',
-    'a=ice-ufrag:AbCd',
-    'a=ice-pwd:0123456789abcdefghijklmn',
-    'a=ice-options:trickle',
-    'a=fingerprint:sha-256 0A:1B:2C:3D:4E:5F:60:71:82:93:A4:B5:C6:D7:E8:F9:0A:1B:2C:3D:4E:5F:60:71:82:93:A4:B5:C6:D7:E8:F9',
-    'a=setup:actpass',
-    'a=mid:0',
-    'a=sctp-port:5000',
-    'a=max-message-size:262144',
-    '',
-  ].join('\r\n');
-
-  it('haalt de nodige onderdelen uit een SDP (UDP-kandidaten, geen TCP)', () => {
-    const s = fromSdp('offer', sdp);
-    expect(s.ufrag).toBe('AbCd');
-    expect(s.pwd).toBe('0123456789abcdefghijklmn');
-    expect(s.setup).toBe('actpass');
-    expect(s.fingerprint).toHaveLength(32);
-    expect(s.candidates).toEqual([
-      { kind: 'host', address: '9f3c1a2b-1111-4c2d-9e7f-0123456789ab.local', port: 54321 },
-      { kind: 'srflx', address: '84.85.86.87', port: 61234 },
-    ]);
+describe('code en versleuteling (doorgeefluik)', () => {
+  it('maakt een code die het andere toestel kan lezen, met dezelfde sleutel', async () => {
+    const a = await newSession();
+    expect(a.code).toMatch(/^PB2\|plekboek-[\w-]{22}\|[\w-]{43}$/);
+    const b = await parseCode(a.code);
+    expect(b.topic).toBe(a.topic);
+    const sealed = await seal(a.key, 'host', 'geheime notities ✓');
+    expect(await open(b.key, 'host', sealed)).toBe('geheime notities ✓');
   });
 
-  it('code heen en terug levert hetzelfde op, en blijft kort', () => {
-    const s = fromSdp('offer', sdp);
-    const code = encode(s);
-    expect(code.startsWith('PB1|o|')).toBe(true);
-    expect(code.length).toBeLessThan(200);
-    const back: Signal = decode(code);
-    expect(back).toEqual(s);
-    // De opgebouwde SDP bevat weer alles wat nodig is.
-    expect(fromSdp('offer', toSdp(back))).toEqual(s);
+  it('elke sessie heeft een ander kanaal en een andere sleutel', async () => {
+    const a = await newSession();
+    const b = await newSession();
+    expect(a.topic).not.toBe(b.topic);
+    await expect(open(b.key, 'host', await seal(a.key, 'host', 'x'))).rejects.toMatchObject({ reason: 'wrongKey' });
   });
 
-  it('IPv6-adressen blijven heel', () => {
-    const s: Signal = { ...fromSdp('answer', sdp), setup: 'active', candidates: [{ kind: 'host', address: '2001:db8::1', port: 5000 }] };
-    expect(decode(encode(s)).candidates[0].address).toBe('2001:db8::1');
+  it('een pakketje van de ene rol kan niet voor de andere worden aangezien', async () => {
+    const a = await newSession();
+    await expect(open(a.key, 'join', await seal(a.key, 'host', 'x'))).rejects.toMatchObject({ reason: 'wrongKey' });
   });
 
-  it('weigert onzin', () => {
-    expect(() => decode('hallo')).toThrow(BadCode);
-    expect(() => decode('PB1|x|a|b|c|x')).toThrow(BadCode);
-    expect(() => decode('PB1|o|a|b|AAAA|x')).toThrow(BadCode);
+  it('versleutelde data bevat de tekst niet en is gecomprimeerd', async () => {
+    const a = await newSession();
+    const text = JSON.stringify({ notes: Array(200).fill({ title: 'Vogelhut De Kiekendief', text: 'lepelaars' }) });
+    const sealed = await seal(a.key, 'join', text);
+    expect(new TextDecoder().decode(sealed).includes('Kiekendief')).toBe(false);
+    expect(sealed.length).toBeLessThan(text.length / 5);
+    expect(await open(a.key, 'join', sealed)).toBe(text);
+  });
+
+  it('gemanipuleerde data wordt geweigerd', async () => {
+    const a = await newSession();
+    const sealed = await seal(a.key, 'host', 'x');
+    sealed[sealed.length - 1] ^= 1;
+    await expect(open(a.key, 'host', sealed)).rejects.toMatchObject({ reason: 'wrongKey' });
+  });
+
+  it('weigert onzin-codes', async () => {
+    for (const bad of ['hallo', 'PB1|o|abc', 'PB2|plekboek-kort|AAAA', 'PB2|ander-kanaal-aaaaaaaaaaaaaaaaaaaaaa|' + 'A'.repeat(43)]) {
+      await expect(parseCode(bad)).rejects.toMatchObject({ reason: 'badCode' });
+    }
   });
 });

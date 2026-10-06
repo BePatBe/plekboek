@@ -30,7 +30,7 @@ De app gebruikt een relatieve `base` en hash-routing, dus hij werkt op elk pad (
 - **iPhone/iPad (Safari):** Deel-knop → *Zet op beginscherm* → *Voeg toe*. Doe dit vóór je notities maakt: Safari en de geïnstalleerde app hebben gescheiden opslag.
 - **Windows (Chrome/Edge):** installeer-icoon rechts in de adresbalk, of menu → *Apps* → *Plekboek installeren*.
 
-Twee toestellen gelijk houden: **Instellingen → Synchroniseren met ander toestel** (via twee QR-codes, rechtstreeks van toestel naar toestel, het best op hetzelfde wifi-netwerk). Een back-up als bestand kan via **Exporteren/Importeren**.
+Twee toestellen gelijk houden: **Instellingen → Synchroniseren met ander toestel** (één QR-code scannen; de notities gaan versleuteld via de gratis doorgeefdienst ntfy.sh, die de inhoud niet kan lezen). Een back-up als bestand kan via **Exporteren/Importeren**.
 
 ## Structuur
 
@@ -39,7 +39,7 @@ src/
   db/          Dexie-schema, notities (CRUD, zoeken, sorteren), tags, instellingen
   backup/      export, import (validatie, samenvoegen/vervangen, migraties)
   analysis/    "beste moment" per tijdvak, weekdag en maand
-  sync/        synchroniseren via QR-code + WebRTC
+  sync/        synchroniseren: QR-code, AES-versleuteling, doorgeefluik ntfy.sh
   geo/         afstand, GPS, Nominatim (met rate limit), titelvoorstel
   i18n/        nl.json, en.json
   components/  kaarten (Leaflet), cards-wiel, editor (Tiptap), tagkiezer, …

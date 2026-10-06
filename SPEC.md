@@ -13,13 +13,13 @@ Een gratis app voor de telefoon waarmee je aantekeningen koppelt aan een plek op
 | Draait op Android, iPhone en Windows-laptops (Chrome/Edge) | **Progressive Web App (PWA)**: je installeert hem via de browser op het startscherm (telefoon) of als app in Windows (laptop) |
 | Kost niets | Open-source libraries, OpenStreetMap-kaart, gratis hosting (GitHub Pages) |
 | Lokale database | IndexedDB in de browser, via Dexie.js |
-| Overzetten naar een nieuw toestel | Export naar een JSON-bestand en import van dat bestand, of rechtstreeks synchroniseren tussen twee toestellen via QR-codes (§5a) |
+| Overzetten naar een nieuw toestel | Export naar een JSON-bestand en import van dat bestand, of synchroniseren tussen twee toestellen via één QR-code (§5a) |
 | Offline bruikbaar | App-shell en data volledig offline; bekeken kaarttegels worden gecachet |
 | Talen | Nederlands en Engels, te kiezen in de instellingen (standaard: taal van het toestel) |
 | Weergave | Licht en donker, te kiezen in de instellingen (standaard: volgt het toestel) |
 | Foto's | Niet in v1, maar datamodel en exportformaat houden er rekening mee (zie §9) |
 
-**Geen backend, geen account, geen tracking.** Alle data blijft op het toestel. Ook synchroniseren gaat rechtstreeks van toestel naar toestel, zonder cloud.
+**Geen backend, geen account, geen tracking.** Alle data blijft op het toestel. Synchroniseren gaat versleuteld via een gratis doorgeefdienst (ntfy.sh), die de inhoud niet kan lezen (§5a).
 
 ---
 
@@ -42,7 +42,7 @@ Een gratis app voor de telefoon waarmee je aantekeningen koppelt aan een plek op
 - **GPS** (`navigator.geolocation`) werkt ook zonder internet, maar alleen als de app open is. Er is geen achtergrondtracking, en dat is ook niet nodig.
 - **Windows-laptop:**
   - **Locatie:** de meeste laptops hebben geen GPS. `navigator.geolocation` gebruikt dan de Windows-locatiedienst (positie via wifi, vaak 20–500 m nauwkeurig). Daarvoor moet Locatie aanstaan in Windows (Instellingen → Privacy en beveiliging → Locatie). Offline is er meestal geen positie. *Kies op kaart* is op de laptop dus de gewone manier. Is de nauwkeurigheid slechter dan `samePlaceRadiusM`, dan toont de app een waarschuwing met de suggestie om de plek op de kaart te kiezen.
-  - **Synchronisatie:** laptop en telefoon hebben elk hun eigen database. Overzetten gaat via export/import (§5) of rechtstreeks via QR-codes (§5a).
+  - **Synchronisatie:** laptop en telefoon hebben elk hun eigen database. Overzetten gaat via export/import (§5) of via één QR-code (§5a).
   - **Firefox** werkt als website, maar installeren gaat alleen via Chrome/Edge.
 
 ### Installeren
@@ -263,20 +263,20 @@ Bestandsnaam: `plekboek-backup-YYYY-MM-DD.json`
 - **Tags met dezelfde naam** en een ander `id`: de tag met het kleinste `id` wint, op elk toestel. Zo komen toestellen na synchroniseren op dezelfde tags uit.
 - Toon na afloop een samenvatting: "123 notities toegevoegd, 4 bijgewerkt, 1 overgeslagen".
 
-## 5a. Synchroniseren tussen twee toestellen (QR-codes)
+## 5a. Synchroniseren tussen twee toestellen (QR-code + versleuteld doorgeefluik)
 
-Zonder server, account of cloud: de toestellen maken een directe WebRTC-verbinding. De verbindingsgegevens gaan via twee QR-codes.
+Zonder eigen server en zonder account. De toestellen hoeven niet op hetzelfde netwerk te zitten; beide hebben wel internet nodig.
 
-1. Toestel 1 kiest *Code tonen* en toont een QR-code (het aanbod).
-2. Toestel 2 kiest *Code scannen*, scant die met de camera en toont een antwoord-QR-code.
-3. Toestel 1 tikt op *Scan nu de antwoordcode* en scant die.
-4. Verbinding: beide toestellen sturen een momentopname van hun data (exportformaat §5, in stukken van 16 kB) en voegen de ontvangen data samen volgens §5. Daarna zijn ze gelijk. Instellingen gaan niet mee.
+1. Toestel 1 kiest *Code tonen*. De app maakt een willekeurig kanaal (16 bytes) en een sleutel (AES-256, 32 bytes) en toont die als QR-code: `PB2|plekboek-<kanaal>|<sleutel>`. Meteen daarna zet toestel 1 zijn versleutelde notities klaar in het kanaal.
+2. Toestel 2 kiest *Code scannen* en scant de code (of plakt hem als tekst). Het zet zijn eigen notities versleuteld klaar en haalt die van toestel 1 op.
+3. Beide toestellen voegen de ontvangen notities samen volgens §5 (inclusief verwijderingen) en melden *Klaar*. Instellingen gaan niet mee.
 
 Details:
-- **Compacte code:** alleen ICE-gebruikersnaam/wachtwoord, DTLS-vingerafdruk, rol en UDP-kandidaten: `PB1|o of a|ufrag|pwd|vingerafdruk|setup|kandidaten…`, ca. 100–150 tekens. Het toestel bouwt daar zelf weer een geldige SDP van. Kleine QR-codes scannen ook goed met een laptopwebcam.
-- **Scannen:** camera via `getUserMedia` (achtercamera als die er is), herkenning met jsQR. Zonder camera of toestemming: de code als tekst delen en plakken.
-- **Netwerk:** werkt het best op hetzelfde wifi-netwerk. Openbare STUN-servers (Cloudflare, Google) helpen de toestellen elkaar te vinden; die zien alleen IP-adressen. Geen TURN-relay, dus netwerken die directe verbindingen blokkeren (sommige gast- of bedrijfsnetwerken) werken niet; dan blijft export/import over.
-- **Fouten:** verkeerde code (aanbod waar een antwoord verwacht wordt) → duidelijke melding; geen verbinding binnen 30 s → melding met de wifi-tip; andere kant heeft een nieuwere app-versie → melding om bij te werken.
+- **Doorgeefluik:** ntfy.sh (gratis, open source, geen account). Elk pakketje is een bijlage in het kanaal met de naam `host.bin` of `join.bin`. Bijlagen verlopen daar na hooguit 3 uur; maximaal ca. 15 MB per pakketje.
+- **Versleuteling:** JSON (exportformaat §5) → gzip → AES-GCM met een willekeurige iv; de rol (host/join) is extra geauthenticeerde data. ntfy.sh ziet alleen versleutelde bytes en de kanaalnaam. De sleutel staat alleen in de QR-code.
+- **Wachten:** live via Server-Sent Events, plus enkele gewone opvragen (na 2 en 6 s, daarna elke 20 s), omdat ntfy.sh een nieuw bericht pas na een fractie van een seconde opslaat. Toestel 1 wacht maximaal 10 minuten, toestel 2 maximaal 2 minuten.
+- **Fouten:** geen internet, het andere toestel reageert niet, sleutel klopt niet (andere of beschadigde code), te veel gegevens, doorgeefdienst niet bereikbaar. Bij elke fout blijft export/import (§5) beschikbaar.
+- **Eerder geprobeerd:** een directe WebRTC-verbinding (twee QR-codes) bleek in de praktijk te kwetsbaar: tussen een Android-telefoon en een Windows-laptop op hetzelfde wifi kwam geen UDP-verkeer door, terwijl ping wel werkte. Google Drive is afgevallen omdat het een Google Cloud-project vereist.
 
 ## 6. Offline-gedrag
 
@@ -317,8 +317,7 @@ Details:
 │  │  ├─ geocode.ts          # Nominatim zoeken + reverse geocoding, met rate limit
 │  │  └─ suggestTitle.ts     # titelvoorstel: eerst nabije notitie, dan reverse geocoding
 │  ├─ sync/
-│  │  ├─ signal.ts           # compacte QR-code ↔ SDP
-│  │  └─ peer.ts             # WebRTC-verbinding + uitwisselprotocol
+│  │  └─ relay.ts            # QR-code, versleuteling, doorgeefluik (ntfy.sh)
 │  ├─ i18n/
 │  │  ├─ index.ts
 │  │  ├─ nl.json
