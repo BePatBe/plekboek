@@ -5,12 +5,14 @@ export type Route =
   | { name: 'new'; params: URLSearchParams }
   | { name: 'read'; id: string }
   | { name: 'edit'; id: string }
-  | { name: 'settings' };
+  | { name: 'settings' }
+  | { name: 'sync' };
 
 export function parseHash(hash: string): Route {
   const [path, query = ''] = hash.replace(/^#/, '').split('?');
   const parts = path.split('/').filter(Boolean);
   if (parts[0] === 'settings') return { name: 'settings' };
+  if (parts[0] === 'sync') return { name: 'sync' };
   if (parts[0] === 'note') {
     if (parts[1] === 'new') return { name: 'new', params: new URLSearchParams(query) };
     if (parts[1] && parts[2] === 'edit') return { name: 'edit', id: decodeURIComponent(parts[1]) };

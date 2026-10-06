@@ -39,6 +39,12 @@ export async function updateSettings(patch: Partial<Settings>) {
   await saveSettings(next);
 }
 
+/** Laatste export of synchronisatie met een ander toestel; beide tellen als back-up. */
+export function lastBackupAt(s: Settings): string | undefined {
+  const all = [s.lastExportAt, s.lastSyncAt].filter((x): x is string => !!x);
+  return all.sort((a, b) => Date.parse(b) - Date.parse(a))[0];
+}
+
 /** Zet instellingen die elders (bijv. bij importeren) al zijn opgeslagen. */
 export function replaceSettings(s: Settings) {
   settingsStore.set(s);

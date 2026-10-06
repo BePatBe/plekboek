@@ -7,11 +7,23 @@ import { ReadScreen } from './screens/ReadScreen';
 import { SettingsScreen } from './screens/SettingsScreen';
 
 type EditModule = typeof import('./screens/EditScreen');
+type SyncModule = typeof import('./screens/SyncScreen');
 
 // Het invoerscherm (met de Tiptap-editor) is het grootste deel van de code;
 // pas laden als het nodig is, maar wel alvast op de achtergrond.
 let editModule: Promise<EditModule> | null = null;
 const loadEdit = () => (editModule ??= import('./screens/EditScreen'));
+
+let syncModule: Promise<SyncModule> | null = null;
+const loadSync = () => (syncModule ??= import('./screens/SyncScreen'));
+
+function useSyncScreen(active: boolean): SyncModule['SyncScreen'] | null {
+  const [mod, setMod] = useState<SyncModule | null>(null);
+  useEffect(() => {
+    if (active) loadSync().then(setMod);
+  }, [active]);
+  return mod?.SyncScreen ?? null;
+}
 
 function useEditScreen(): EditModule['EditScreen'] | null {
   const [mod, setMod] = useState<EditModule | null>(null);
@@ -25,6 +37,7 @@ export function App() {
   useLang();
   const route = useRoute();
   const EditScreen = useEditScreen();
+  const SyncScreen = useSyncScreen(route.name === 'sync');
 
   // Elk scherm begint bovenaan.
   useEffect(() => {
@@ -42,6 +55,9 @@ export function App() {
     case 'read':
       screen = <ReadScreen key={route.id} id={route.id} />;
       break;
+    case 'sync':
+      screen = SyncScreen ? <SyncScreen /> : <div class="screen" />;
+      break;
     case 'settings':
       screen = <SettingsScreen />;
       break;
@@ -49,7 +65,7 @@ export function App() {
       screen = <SearchScreen />;
   }
 
-  const showNav = route.name !== 'new' && route.name !== 'edit';
+  const showNav = route.name !== 'new' && route.name !== 'edit' && route.name !== 'sync';
   return (
     <div class={`app ${showNav ? 'with-nav' : ''}`}>
       {screen}

@@ -8,11 +8,11 @@ import { db } from '../db/db';
 import { fmtBytes, fmtNumber, fmtObserved, t, tn, useLang } from '../i18n';
 import { useStore } from '../lib/store';
 import { daysSince, toLocalIso } from '../lib/time';
-import { installedStore, installPromptStore, isIOS, onlineStore, promptInstall, replaceSettings, settingsStore, updateSettings } from '../state';
+import { installedStore, installPromptStore, isIOS, lastBackupAt, promptInstall, replaceSettings, settingsStore, updateSettings } from '../state';
 import { Header, Modal, Section, Segmented, Toast } from '../components/common';
 import { Icon } from '../components/Icon';
 import { IosInstallSteps } from '../components/InstallHelp';
-import { connectDrive, disconnectDrive, driveConfigured, syncNow, syncStore } from '../sync/manager';
+import { navigate } from '../router';
 
 export function SettingsScreen() {
   useLang();
@@ -76,26 +76,8 @@ export function SettingsScreen() {
         </Section>
 
         <Section title={t('settings.backup')}>
-          <Segmented<Settings['syncMethod']>
-            label={t('sync.method')}
-            value={s.syncMethod}
-            onChange={(syncMethod) => updateSettings({ syncMethod })}
-            options={[
-              { value: 'file', label: t('sync.methodFile') },
-              { value: 'gdrive', label: 'Google Drive' },
-            ]}
-          />
-          {s.syncMethod === 'file' ? (
-            <Backup settings={s} onToast={setToast} />
-          ) : (
-            <>
-              <DriveSync settings={s} onToast={setToast} />
-              <details class="manual-backup">
-                <summary>{t('sync.manualBackup')}</summary>
-                <Backup settings={s} onToast={setToast} reminder={false} />
-              </details>
-            </>
-          )}
+          <PeerSyncEntry settings={s} />
+          <Backup settings={s} onToast={setToast} />
         </Section>
 
         <Section title={t('settings.offlineMap')}>
@@ -126,6 +108,8 @@ export function SettingsScreen() {
               <li>Tiptap — MIT</li>
               <li>DOMPurify — Apache-2.0 / MPL-2.0</li>
               <li>Workbox — MIT</li>
+              <li>jsQR — Apache-2.0</li>
+              <li>QR Code Generator (Kazuhiko Arase) — MIT</li>
             </ul>
           </details>
         </Section>
@@ -266,89 +250,27 @@ function DeleteTagDialog({ tag, tags, count, onClose }: { tag: Tag; tags: Tag[];
 
 const REMINDER_OPTIONS = [0, 7, 14, 30, 60, 90];
 
-/* ---------- Google Drive ---------- */
+/* ---------- synchroniseren met een ander toestel ---------- */
 
-function DriveSync({ settings, onToast }: { settings: Settings; onToast: (m: string) => void }) {
-  const status = useStore(syncStore);
-  const online = useStore(onlineStore);
-  const [busy, setBusy] = useState(false);
-
-  if (!driveConfigured()) return <p class="banner banner-warn">{t('sync.notConfigured')}</p>;
-
-  const connect = async () => {
-    setBusy(true);
-    try {
-      await connectDrive();
-      onToast(t('sync.connected'));
-    } catch {
-      onToast(t('sync.connectFailed'));
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  if (!settings.driveEmail) {
-    return (
-      <>
-        <p class="muted small">{t('sync.explain')}</p>
-        <button type="button" class="btn btn-primary btn-block" onClick={connect} disabled={busy || !online}>
-          <Icon name="refresh" size={18} /> {t('sync.connect')}
-        </button>
-        {!online && <p class="muted small">{t('sync.needsOnline')}</p>}
-      </>
-    );
-  }
-
-  const statusText =
-    status.state === 'syncing'
-      ? t('sync.syncing')
-      : status.state === 'needsAuth'
-        ? t('sync.needsAuth')
-        : status.state === 'offline'
-          ? t('sync.offline')
-          : status.state === 'error'
-            ? t('sync.error')
-            : settings.lastSyncAt
-              ? t('sync.last', { date: `${fmtObserved(settings.lastSyncAt, 'short')} ${fmtObserved(settings.lastSyncAt, 'time')}` })
-              : t('sync.never');
-  const pulled = status.state === 'idle' && status.last?.pulled;
-
+function PeerSyncEntry({ settings }: { settings: Settings }) {
   return (
     <>
-      <div class="kv">
-        <span>{t('sync.account')}</span>
-        <strong class="ellipsis">{settings.driveEmail}</strong>
-      </div>
-      <p class={`small ${status.state === 'error' || status.state === 'needsAuth' ? 'warn' : 'muted'}`} aria-live="polite">
-        {statusText}
-        {pulled && (pulled.added || pulled.updated || pulled.deleted)
-          ? ` · ${t('sync.pulled', { added: pulled.added, updated: pulled.updated, deleted: pulled.deleted })}`
-          : ''}
+      <button type="button" class="btn btn-primary btn-block" onClick={() => navigate('#/sync')}>
+        <Icon name="refresh" size={18} /> {t('peer.open')}
+      </button>
+      <p class="muted small">
+        {settings.lastSyncAt
+          ? t('peer.last', { date: `${fmtObserved(settings.lastSyncAt, 'short')} ${fmtObserved(settings.lastSyncAt, 'time')}` })
+          : t('peer.hint')}
       </p>
-      <div class="row gap stretch">
-        <button type="button" class="btn btn-primary" onClick={() => syncNow(true)} disabled={status.state === 'syncing' || !online}>
-          <Icon name="refresh" size={18} class={status.state === 'syncing' ? 'spin' : ''} /> {t('sync.now')}
-        </button>
-        <button
-          type="button"
-          class="btn"
-          onClick={async () => {
-            if (!confirm(t('sync.confirmDisconnect'))) return;
-            await disconnectDrive();
-            onToast(t('sync.disconnected'));
-          }}
-        >
-          {t('sync.disconnect')}
-        </button>
-      </div>
-      <p class="muted small">{t('sync.howItWorks')}</p>
+      <hr class="divider" />
     </>
   );
 }
 
 /* ---------- back-up via bestand ---------- */
 
-function Backup({ settings, onToast, reminder = true }: { settings: Settings; onToast: (m: string) => void; reminder?: boolean }) {
+function Backup({ settings, onToast }: { settings: Settings; onToast: (m: string) => void }) {
   const fileInput = useRef<HTMLInputElement>(null);
   const [pending, setPending] = useState<ParsedBackup | null>(null);
   const [parseError, setParseError] = useState('');
@@ -356,11 +278,8 @@ function Backup({ settings, onToast, reminder = true }: { settings: Settings; on
   const [busy, setBusy] = useState(false);
   const noteCount = useLiveQuery(() => db.notes.count(), []) ?? 0;
 
-  const overdue =
-    reminder &&
-    settings.backupReminderDays > 0 &&
-    noteCount > 0 &&
-    (!settings.lastExportAt || daysSince(settings.lastExportAt) >= settings.backupReminderDays);
+  const last = lastBackupAt(settings);
+  const overdue = settings.backupReminderDays > 0 && noteCount > 0 && (!last || daysSince(last) >= settings.backupReminderDays);
 
   const doExport = async () => {
     setBusy(true);
@@ -421,7 +340,7 @@ function Backup({ settings, onToast, reminder = true }: { settings: Settings; on
     <>
       {overdue && (
         <p class="banner banner-warn">
-          {settings.lastExportAt ? t('backup.reminder', { days: daysSince(settings.lastExportAt) }) : t('backup.reminderNever')}
+          {last ? t('backup.reminder', { days: daysSince(last) }) : t('backup.reminderNever')}
         </p>
       )}
       <div class="row gap stretch">

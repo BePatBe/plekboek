@@ -31,10 +31,7 @@ export interface Settings {
   defaultMapCenter?: { lat: number; lng: number; zoom: number };
   lastExportAt?: string;
   backupReminderDays: number;
-  /** Per toestel: back-up via een bestand, of automatisch synchroniseren met Google Drive. */
-  syncMethod: 'file' | 'gdrive';
-  /** Gekoppeld Google-account (alleen ter weergave); leeg = niet gekoppeld. */
-  driveEmail?: string;
+  /** Laatste geslaagde synchronisatie met een ander toestel (telt ook als back-up). */
   lastSyncAt?: string;
 }
 
@@ -43,7 +40,6 @@ export const DEFAULT_SETTINGS: Settings = {
   theme: 'system',
   samePlaceRadiusM: 100,
   backupReminderDays: 30,
-  syncMethod: 'file',
 };
 
 export interface Deletion {

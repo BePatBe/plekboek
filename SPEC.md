@@ -13,13 +13,13 @@ Een gratis app voor de telefoon waarmee je aantekeningen koppelt aan een plek op
 | Draait op Android, iPhone en Windows-laptops (Chrome/Edge) | **Progressive Web App (PWA)**: je installeert hem via de browser op het startscherm (telefoon) of als app in Windows (laptop) |
 | Kost niets | Open-source libraries, OpenStreetMap-kaart, gratis hosting (GitHub Pages) |
 | Lokale database | IndexedDB in de browser, via Dexie.js |
-| Overzetten naar een nieuw toestel | Export naar een JSON-bestand en import van dat bestand, of automatisch synchroniseren via de eigen Google Drive (keuze in Instellingen, zie §5a) |
+| Overzetten naar een nieuw toestel | Export naar een JSON-bestand en import van dat bestand, of rechtstreeks synchroniseren tussen twee toestellen via QR-codes (§5a) |
 | Offline bruikbaar | App-shell en data volledig offline; bekeken kaarttegels worden gecachet |
 | Talen | Nederlands en Engels, te kiezen in de instellingen (standaard: taal van het toestel) |
 | Weergave | Licht en donker, te kiezen in de instellingen (standaard: volgt het toestel) |
 | Foto's | Niet in v1, maar datamodel en exportformaat houden er rekening mee (zie §9) |
 
-**Geen backend, geen account, geen tracking.** Alle data blijft op het toestel. Alleen wie zelf kiest voor Google Drive-synchronisatie, slaat een kopie op in een verborgen map van de eigen Drive.
+**Geen backend, geen account, geen tracking.** Alle data blijft op het toestel. Ook synchroniseren gaat rechtstreeks van toestel naar toestel, zonder cloud.
 
 ---
 
@@ -42,7 +42,7 @@ Een gratis app voor de telefoon waarmee je aantekeningen koppelt aan een plek op
 - **GPS** (`navigator.geolocation`) werkt ook zonder internet, maar alleen als de app open is. Er is geen achtergrondtracking, en dat is ook niet nodig.
 - **Windows-laptop:**
   - **Locatie:** de meeste laptops hebben geen GPS. `navigator.geolocation` gebruikt dan de Windows-locatiedienst (positie via wifi, vaak 20–500 m nauwkeurig). Daarvoor moet Locatie aanstaan in Windows (Instellingen → Privacy en beveiliging → Locatie). Offline is er meestal geen positie. *Kies op kaart* is op de laptop dus de gewone manier. Is de nauwkeurigheid slechter dan `samePlaceRadiusM`, dan toont de app een waarschuwing met de suggestie om de plek op de kaart te kiezen.
-  - **Synchronisatie:** laptop en telefoon hebben elk hun eigen database. Overzetten gaat via export/import (§5) of via Google Drive (§5a).
+  - **Synchronisatie:** laptop en telefoon hebben elk hun eigen database. Overzetten gaat via export/import (§5) of rechtstreeks via QR-codes (§5a).
   - **Firefox** werkt als website, maar installeren gaat alleen via Chrome/Edge.
 
 ### Installeren
@@ -98,9 +98,7 @@ interface Settings {       // één record, key 'settings'
   defaultMapCenter?: { lat: number; lng: number; zoom: number };
   lastExportAt?: string;
   backupReminderDays: number;   // standaard 30; 0 = uit
-  syncMethod: 'file' | 'gdrive'; // per toestel, standaard 'file'
-  driveEmail?: string;          // gekoppeld Google-account (alleen weergave)
-  lastSyncAt?: string;
+  lastSyncAt?: string;          // laatste synchronisatie met een ander toestel (telt als back-up)
 }
 
 interface Deletion {         // tombstone: onthoudt verwijderingen voor samenvoegen/synchroniseren
@@ -217,7 +215,7 @@ Tijdvakken: nacht 0–6 u, ochtend 6–12 u, middag 12–18 u, avond 18–24 u (
 - **Weergave:** Systeem / Licht / Donker. Een wijziging is direct zichtbaar, zonder herstart.
 - **Tags beheren:** een lijst met naam, kleur en aantal notities. Je kunt tags toevoegen, hernoemen, van kleur veranderen en verwijderen (zie de regel in §3).
 - **"Zelfde plek"-straal:** een schuifregelaar van 25 tot 500 m (stappen van 25 m, standaard 100 m), met de gekozen waarde ernaast. Notities binnen deze straal tellen als één plek (voor het titelvoorstel en de "beste moment"-analyse).
-- **Back-up en synchronisatie:** keuze *Bestand* of *Google Drive* (§5a). Bij Google Drive blijft de handmatige back-up beschikbaar onder een uitklapbaar kopje.
+- **Back-up en synchronisatie:** knop *Synchroniseren met ander toestel* (opent het sync-scherm, §5a) met "Laatst gesynchroniseerd: …", en daaronder de back-up via een bestand. De back-upherinnering telt zowel export als synchronisatie.
 - **Back-up via bestand:**
   - *Exporteren*: maakt een JSON-bestand (zie §5) en biedt het aan via de deelfunctie (Web Share API, zodat je het kunt opslaan in Bestanden, Drive, mail, enz.). Web Share werkt ook op Windows (Chrome/Edge). Als dat niet beschikbaar is, wordt het bestand gedownload (op de laptop naar de map Downloads).
   - *Importeren*: kies een bestand en kies daarna **Samenvoegen** of **Alles vervangen** (met bevestiging).
@@ -265,16 +263,20 @@ Bestandsnaam: `plekboek-backup-YYYY-MM-DD.json`
 - **Tags met dezelfde naam** en een ander `id`: de tag met het kleinste `id` wint, op elk toestel. Zo komen toestellen na synchroniseren op dezelfde tags uit.
 - Toon na afloop een samenvatting: "123 notities toegevoegd, 4 bijgewerkt, 1 overgeslagen".
 
-## 5a. Synchroniseren via Google Drive
+## 5a. Synchroniseren tussen twee toestellen (QR-codes)
 
-- **Opslag:** één bestand `plekboek-sync.json` (zelfde formaat als §5) in de verborgen `appDataFolder` van de eigen Google Drive. Scope `drive.appdata`: de app ziet geen andere bestanden.
-- **Inloggen:** Google Identity Services (token-model), geen eigen server. Een toegangstoken is ca. een uur geldig; daarna toont de kopbalk de knop *Nu synchroniseren* (één tik, Google-venster sluit meestal direct).
-- **Ronde:** bestand ophalen → samenvoegen in de lokale database (§5) → resultaat terugschrijven als er iets is veranderd. Heeft een ander toestel intussen geschreven (`version` van het bestand veranderd), dan begint de ronde opnieuw (max. 3 keer).
-- **Wanneer:** bij openen, bij terugkeren naar de app, bij weer online komen, en 3 s na elke lokale wijziging.
-- **Niet gesynchroniseerd:** instellingen (taal, weergave, straal) horen bij het toestel.
-- **Configuratie:** OAuth-client-ID (type webapplicatie) via `VITE_GOOGLE_CLIENT_ID`; bij GitHub Pages als repository-variabele `GOOGLE_CLIENT_ID`. Zonder ID toont de app dat Google Drive niet is ingesteld.
+Zonder server, account of cloud: de toestellen maken een directe WebRTC-verbinding. De verbindingsgegevens gaan via twee QR-codes.
 
----
+1. Toestel 1 kiest *Code tonen* en toont een QR-code (het aanbod).
+2. Toestel 2 kiest *Code scannen*, scant die met de camera en toont een antwoord-QR-code.
+3. Toestel 1 tikt op *Scan nu de antwoordcode* en scant die.
+4. Verbinding: beide toestellen sturen een momentopname van hun data (exportformaat §5, in stukken van 16 kB) en voegen de ontvangen data samen volgens §5. Daarna zijn ze gelijk. Instellingen gaan niet mee.
+
+Details:
+- **Compacte code:** alleen ICE-gebruikersnaam/wachtwoord, DTLS-vingerafdruk, rol en UDP-kandidaten: `PB1|o of a|ufrag|pwd|vingerafdruk|setup|kandidaten…`, ca. 100–150 tekens. Het toestel bouwt daar zelf weer een geldige SDP van. Kleine QR-codes scannen ook goed met een laptopwebcam.
+- **Scannen:** camera via `getUserMedia` (achtercamera als die er is), herkenning met jsQR. Zonder camera of toestemming: de code als tekst delen en plakken.
+- **Netwerk:** werkt het best op hetzelfde wifi-netwerk. Openbare STUN-servers (Cloudflare, Google) helpen de toestellen elkaar te vinden; die zien alleen IP-adressen. Geen TURN-relay, dus netwerken die directe verbindingen blokkeren (sommige gast- of bedrijfsnetwerken) werken niet; dan blijft export/import over.
+- **Fouten:** verkeerde code (aanbod waar een antwoord verwacht wordt) → duidelijke melding; geen verbinding binnen 30 s → melding met de wifi-tip; andere kant heeft een nieuwere app-versie → melding om bij te werken.
 
 ## 6. Offline-gedrag
 
@@ -314,6 +316,9 @@ Bestandsnaam: `plekboek-backup-YYYY-MM-DD.json`
 │  │  ├─ gps.ts
 │  │  ├─ geocode.ts          # Nominatim zoeken + reverse geocoding, met rate limit
 │  │  └─ suggestTitle.ts     # titelvoorstel: eerst nabije notitie, dan reverse geocoding
+│  ├─ sync/
+│  │  ├─ signal.ts           # compacte QR-code ↔ SDP
+│  │  └─ peer.ts             # WebRTC-verbinding + uitwisselprotocol
 │  ├─ i18n/
 │  │  ├─ index.ts
 │  │  ├─ nl.json

@@ -9,7 +9,7 @@ import { fmtNumber, fmtObserved, langStore, t, useLang } from '../i18n';
 import { createStore, useStore } from '../lib/store';
 import { TIMES_OF_DAY, daysSince, type TimeOfDay } from '../lib/time';
 import { navigate } from '../router';
-import { installedStore, installPromptStore, isIOS, local, onlineStore, promptInstall, settingsStore, updateSettings } from '../state';
+import { installedStore, installPromptStore, isIOS, lastBackupAt, local, onlineStore, promptInstall, settingsStore, updateSettings } from '../state';
 import { CardWheel } from '../components/CardWheel';
 import { Header, StarInput, Toast } from '../components/common';
 import { Icon } from '../components/Icon';
@@ -403,8 +403,7 @@ function Banners({ notes }: { notes: Note[] | undefined }) {
     setDismissed(true);
   };
 
-  // Met Google Drive telt een geslaagde synchronisatie als back-up.
-  const lastBackup = settings.syncMethod === 'gdrive' && settings.driveEmail ? settings.lastSyncAt : settings.lastExportAt;
+  const lastBackup = lastBackupAt(settings);
   let backupDays: number | null = null;
   if (settings.backupReminderDays > 0 && notes?.length && !backupDismissed) {
     const since = lastBackup ?? notes.reduce((min, n) => (n.createdAt < min ? n.createdAt : min), notes[0].createdAt);

@@ -6,41 +6,18 @@ import { buildBackup } from '../src/backup/export';
 import { applyImport, parseBackup } from '../src/backup/import';
 import type { BackupFile } from '../src/backup/schema';
 import type { Note, Tag } from '../src/db/types';
-import { syncWith, type Remote } from '../src/sync/sync';
+import { BadCode, decode, encode, fromSdp, toSdp, type Signal } from '../src/sync/signal';
 import { input, resetDb } from './helpers';
 
 beforeEach(resetDb);
 
-/** Nep-cloud in het geheugen; `onRead` kan een ander toestel laten schrijven tussen lezen en schrijven. */
-function memoryRemote(initial: BackupFile | null = null) {
-  let text = initial ? JSON.stringify(initial) : null;
-  let version = initial ? 1 : 0;
-  let writes = 0;
-  const remote: Remote & { file: () => BackupFile | null; writes: () => number; onRead?: () => void; set: (b: BackupFile) => void } = {
-    async read() {
-      const r = text ? { text, version: String(version) } : null;
-      remote.onRead?.();
-      return r;
-    },
-    async version() {
-      return text ? String(version) : null;
-    },
-    async write(t) {
-      text = t;
-      version++;
-      writes++;
-    },
-    file: () => (text ? JSON.parse(text) : null),
-    writes: () => writes,
-    set(b) {
-      text = JSON.stringify(b);
-      version++;
-    },
-  };
-  return remote;
+/** Wat het andere toestel stuurt, samenvoegen zoals de synchronisatie dat doet. */
+async function mergeFrom(file: BackupFile) {
+  const parsed = parseBackup(JSON.stringify(file));
+  if (!parsed.ok) throw new Error(parsed.error);
+  return applyImport(parsed.data, 'merge');
 }
 
-/** Een bestand zoals een ander toestel het zou schrijven. */
 function otherDevice(parts: { notes?: Note[]; tags?: Tag[]; deletions?: BackupFile['deletions'] }): BackupFile {
   return {
     app: 'plekboek',
@@ -54,137 +31,167 @@ function otherDevice(parts: { notes?: Note[]; tags?: Tag[]; deletions?: BackupFi
 }
 
 const later = (iso: string, s = 60) => new Date(Date.parse(iso) + s * 1000).toISOString();
+const ids = <T extends { id: string }>(xs: T[]) => xs.map((x) => x.id).sort();
 
-describe('synchroniseren', () => {
-  it('eerste keer: lokale notities naar een lege cloud', async () => {
-    await createNote(input({ title: 'A' }));
-    const remote = memoryRemote();
-    const r = await syncWith(remote);
-    expect(r).toEqual({ pulled: null, uploaded: true });
-    expect(remote.file()!.notes.map((n) => n.title)).toEqual(['A']);
-  });
+describe('samenvoegen tussen toestellen', () => {
+  it('beide toestellen eindigen met dezelfde notities, tags en verwijderingen', async () => {
+    // Toestel A
+    const vogelsA = await createTag('Vogels');
+    const shared = await createNote(input({ title: 'Gedeeld', tagId: vogelsA.id }));
+    const onlyA = await createNote(input({ title: 'Alleen A' }));
+    const gone = await createNote(input({ title: 'Wordt gewist' }));
+    const a0 = await buildBackup();
 
-  it('haalt notities van een ander toestel op en schrijft niet als er niets verandert', async () => {
-    const a = await createNote(input({ title: 'Hier' }));
-    const remote = memoryRemote();
-    await syncWith(remote);
-    const theirs = { ...a, id: 'van-de-laptop', title: 'Daar' };
-    remote.set({ ...remote.file()!, notes: [...remote.file()!.notes, theirs] });
+    // Toestel B: kreeg eerder alles van A, wijzigde daarna zelf
+    await resetDb();
+    await mergeFrom(a0);
+    await new Promise((r) => setTimeout(r, 1100));
+    await updateNote(shared.id, input({ title: 'Gedeeld (door B gewijzigd)', tagId: vogelsA.id }));
+    await deleteNote(gone.id);
+    await createNote(input({ title: 'Alleen B' }));
+    const b0 = await buildBackup();
 
-    const r = await syncWith(remote);
-    expect(r.pulled).toMatchObject({ added: 1, updated: 0 });
-    expect((await db.notes.get('van-de-laptop'))!.title).toBe('Daar');
-    expect(r.uploaded).toBe(false); // cloud had al alles
-    const writes = remote.writes();
-    await syncWith(remote);
-    expect(remote.writes()).toBe(writes);
-  });
+    // A wist intussen "Alleen A" niet, maar voegt iets toe
+    await resetDb();
+    await mergeFrom(a0);
+    await createNote(input({ title: 'Nog een van A' }));
+    const a1 = await buildBackup();
 
-  it('synchroniseert geen instellingen', async () => {
-    const remote = memoryRemote(otherDevice({}));
-    await syncWith(remote);
-    const s = await db.settings.get('settings');
-    expect(s?.theme ?? 'system').toBe('system');
-  });
+    // Uitwisselen: A voegt B samen, B voegt A samen
+    await resetDb();
+    await mergeFrom(a1);
+    await mergeFrom(b0);
+    const aEnd = await buildBackup();
 
-  it('een verwijdering op dit toestel verdwijnt ook in de cloud', async () => {
-    const a = await createNote(input({ title: 'Weg' }));
-    const remote = memoryRemote();
-    await syncWith(remote);
-    await deleteNote(a.id);
-    await syncWith(remote);
-    expect(remote.file()!.notes).toHaveLength(0);
-    expect(remote.file()!.deletions).toEqual([expect.objectContaining({ id: a.id, kind: 'note' })]);
+    await resetDb();
+    await mergeFrom(b0);
+    await mergeFrom(a1);
+    const bEnd = await buildBackup();
+
+    expect(ids(aEnd.notes)).toEqual(ids(bEnd.notes));
+    expect(aEnd.notes.map((n) => n.title).sort()).toEqual(['Alleen A', 'Alleen B', 'Gedeeld (door B gewijzigd)', 'Nog een van A']);
+    expect(ids(aEnd.tags)).toEqual(ids(bEnd.tags));
+    expect(ids(aEnd.deletions)).toEqual([gone.id]);
+    expect(ids(bEnd.deletions)).toEqual([gone.id]);
+    expect(onlyA.id).toBeTruthy();
   });
 
   it('een verwijdering elders verwijdert hier, behalve als de notitie hier later is gewijzigd', async () => {
     const a = await createNote(input({ title: 'A' }));
     const b = await createNote(input({ title: 'B' }));
-    const remote = memoryRemote(
+    await new Promise((r) => setTimeout(r, 1100));
+    await updateNote(b.id, input({ title: 'B gewijzigd' }));
+    const summary = await mergeFrom(
       otherDevice({
         deletions: [
           { id: a.id, kind: 'note', deletedAt: later(a.updatedAt) },
-          { id: b.id, kind: 'note', deletedAt: b.updatedAt },
+          { id: b.id, kind: 'note', deletedAt: b.updatedAt }, // vóór de wijziging hier
         ],
       }),
     );
-    await new Promise((r) => setTimeout(r, 1100));
-    await updateNote(b.id, input({ title: 'B gewijzigd' })); // ná de verwijdering
-    const r = await syncWith(remote);
-    expect(r.pulled!.deleted).toBe(1);
+    expect(summary.deleted).toBe(1);
     expect(await db.notes.get(a.id)).toBeUndefined();
     expect((await db.notes.get(b.id))!.title).toBe('B gewijzigd');
-    expect((await db.deletions.get(b.id))).toBeUndefined(); // b leeft weer
-    expect(remote.file()!.notes.map((n) => n.id)).toEqual([b.id]);
+    expect(await db.deletions.get(b.id)).toBeUndefined(); // b leeft weer
   });
 
-  it('een verwijderde notitie komt niet terug via een oud bestand', async () => {
+  it('een gewiste notitie komt niet terug via een oud bestand', async () => {
     const a = await createNote(input({ title: 'A' }));
     const old = await buildBackup();
     await deleteNote(a.id);
-    const parsed = parseBackup(JSON.stringify(old));
-    if (!parsed.ok) throw new Error();
-    await applyImport(parsed.data, 'merge');
+    await mergeFrom(old);
     expect(await db.notes.get(a.id)).toBeUndefined();
   });
 
   it('tags met dezelfde naam komen op beide toestellen op dezelfde tag uit', async () => {
     const mine = await createTag('Vogels');
     const n = await createNote(input({ tagId: mine.id }));
-    const theirTag: Tag = { ...mine, id: '00000000-aaaa-4aaa-8aaa-000000000000', name: 'vogels' }; // kleiner id wint
+    const theirTag: Tag = { ...mine, id: '00000000-aaaa-4aaa-8aaa-000000000000', name: 'vogels' }; // kleinste id wint
     const theirNote = { ...n, id: 'hun-notitie', tagId: theirTag.id };
-    const remote = memoryRemote(otherDevice({ tags: [theirTag], notes: [theirNote] }));
-
-    await syncWith(remote);
-    expect((await db.tags.toArray()).map((t) => t.id)).toEqual([theirTag.id]);
+    await mergeFrom(otherDevice({ tags: [theirTag], notes: [theirNote] }));
+    expect(ids(await db.tags.toArray())).toEqual([theirTag.id]);
     expect((await db.notes.get(n.id))!.tagId).toBe(theirTag.id);
     expect((await db.notes.get('hun-notitie'))!.tagId).toBe(theirTag.id);
     expect((await db.deletions.get(mine.id))!.kind).toBe('tag');
-    const cloud = remote.file()!;
-    expect(cloud.tags.map((t) => t.id)).toEqual([theirTag.id]);
-    expect(cloud.notes.every((x) => x.tagId === theirTag.id)).toBe(true);
   });
 
-  it('een verwijderde tag elders: notities hier verliezen die tag', async () => {
+  it('een gewiste tag elders: notities hier verliezen die tag', async () => {
     const tag = await createTag('Strand');
     const n = await createNote(input({ tagId: tag.id }));
-    const remote = memoryRemote(otherDevice({ deletions: [{ id: tag.id, kind: 'tag', deletedAt: later(tag.updatedAt) }] }));
-    await syncWith(remote);
+    await mergeFrom(otherDevice({ deletions: [{ id: tag.id, kind: 'tag', deletedAt: later(tag.updatedAt) }] }));
     expect(await db.tags.count()).toBe(0);
     expect((await db.notes.get(n.id))!.tagId).toBeNull();
   });
 
-  it('lokaal tag verwijderen synchroniseert naar de cloud', async () => {
+  it('tag verwijderen laat een tombstone achter die meegaat in de export', async () => {
     const tag = await createTag('Strand');
-    await createNote(input({ tagId: tag.id }));
-    const remote = memoryRemote();
-    await syncWith(remote);
     await deleteTag(tag.id, null);
-    await syncWith(remote);
-    expect(remote.file()!.tags).toHaveLength(0);
-    expect(remote.file()!.notes[0].tagId).toBeNull();
+    expect((await buildBackup()).deletions).toEqual([expect.objectContaining({ id: tag.id, kind: 'tag' })]);
   });
 
-  it('schrijft een ander toestel tussendoor, dan begint de ronde opnieuw', async () => {
-    await createNote(input({ title: 'Hier' }));
-    const remote = memoryRemote(otherDevice({}));
-    let first = true;
-    remote.onRead = () => {
-      if (!first) return;
-      first = false;
-      const n = { ...(remote.file()!), notes: [{ ...(input() as Note), id: 'tussendoor', title: 'Tussendoor', textPlain: '', createdAt: '2026-10-06T10:00:00+02:00', updatedAt: '2026-10-06T10:00:00+02:00' }] };
-      remote.set(n);
-    };
-    await syncWith(remote);
-    expect((await db.notes.get('tussendoor'))!.title).toBe('Tussendoor');
-    expect(remote.file()!.notes.map((n) => n.title).sort()).toEqual(['Hier', 'Tussendoor']);
+  it('samenvoegen laat de instellingen van dit toestel staan', async () => {
+    await mergeFrom(otherDevice({}));
+    expect((await db.settings.get('settings'))?.theme ?? 'system').toBe('system');
+  });
+});
+
+describe('verbindingscode (QR)', () => {
+  // Echte SDP van Chrome (afgekort tot wat ertoe doet, plus regels die we moeten negeren)
+  const sdp = [
+    'v=0',
+    'o=- 123 2 IN IP4 127.0.0.1',
+    's=-',
+    't=0 0',
+    'a=group:BUNDLE 0',
+    'a=extmap-allow-mixed',
+    'a=msid-semantic: WMS',
+    'm=application 9 UDP/DTLS/SCTP webrtc-datachannel',
+    'c=IN IP4 0.0.0.0',
+    'a=candidate:3891245637 1 udp 2113937151 9f3c1a2b-1111-4c2d-9e7f-0123456789ab.local 54321 typ host generation 0 network-cost 999',
+    'a=candidate:842163049 1 udp 1677729535 84.85.86.87 61234 typ srflx raddr 0.0.0.0 rport 0 generation 0 network-cost 999',
+    'a=candidate:1 1 tcp 1518280447 192.168.1.5 9 typ host tcptype active',
+    'a=ice-ufrag:AbCd',
+    'a=ice-pwd:0123456789abcdefghijklmn',
+    'a=ice-options:trickle',
+    'a=fingerprint:sha-256 0A:1B:2C:3D:4E:5F:60:71:82:93:A4:B5:C6:D7:E8:F9:0A:1B:2C:3D:4E:5F:60:71:82:93:A4:B5:C6:D7:E8:F9',
+    'a=setup:actpass',
+    'a=mid:0',
+    'a=sctp-port:5000',
+    'a=max-message-size:262144',
+    '',
+  ].join('\r\n');
+
+  it('haalt de nodige onderdelen uit een SDP (UDP-kandidaten, geen TCP)', () => {
+    const s = fromSdp('offer', sdp);
+    expect(s.ufrag).toBe('AbCd');
+    expect(s.pwd).toBe('0123456789abcdefghijklmn');
+    expect(s.setup).toBe('actpass');
+    expect(s.fingerprint).toHaveLength(32);
+    expect(s.candidates).toEqual([
+      { kind: 'host', address: '9f3c1a2b-1111-4c2d-9e7f-0123456789ab.local', port: 54321 },
+      { kind: 'srflx', address: '84.85.86.87', port: 61234 },
+    ]);
   });
 
-  it('weigert een kapot sync-bestand zonder lokale data aan te raken', async () => {
-    await createNote(input());
-    const remote = memoryRemote();
-    await remote.write('{"app":"iets anders"}');
-    await expect(syncWith(remote)).rejects.toThrow('notPlekboek');
-    expect(await db.notes.count()).toBe(1);
+  it('code heen en terug levert hetzelfde op, en blijft kort', () => {
+    const s = fromSdp('offer', sdp);
+    const code = encode(s);
+    expect(code.startsWith('PB1|o|')).toBe(true);
+    expect(code.length).toBeLessThan(200);
+    const back: Signal = decode(code);
+    expect(back).toEqual(s);
+    // De opgebouwde SDP bevat weer alles wat nodig is.
+    expect(fromSdp('offer', toSdp(back))).toEqual(s);
+  });
+
+  it('IPv6-adressen blijven heel', () => {
+    const s: Signal = { ...fromSdp('answer', sdp), setup: 'active', candidates: [{ kind: 'host', address: '2001:db8::1', port: 5000 }] };
+    expect(decode(encode(s)).candidates[0].address).toBe('2001:db8::1');
+  });
+
+  it('weigert onzin', () => {
+    expect(() => decode('hallo')).toThrow(BadCode);
+    expect(() => decode('PB1|x|a|b|c|x')).toThrow(BadCode);
+    expect(() => decode('PB1|o|a|b|AAAA|x')).toThrow(BadCode);
   });
 });
