@@ -73,7 +73,9 @@ function mask(address: string): string {
 function describe(s: Signal | null): string {
   if (!s) return '–';
   if (!s.candidates.length) return 'geen adressen';
-  return s.candidates.map((c) => `${mask(c.address)} (${c.kind === 'host' ? 'lokaal' : 'STUN'})`).join(', ');
+  const list = s.candidates.map((c) => `${mask(c.address)}:${c.port} (${c.kind === 'host' ? 'lokaal' : 'STUN'})`).join(', ');
+  // Gebruikersnaam en begin van het wachtwoord: zo is te controleren of beide kanten de code goed hebben gelezen.
+  return `${list} · id ${s.ufrag}/${s.pwd.slice(0, 4)}`;
 }
 
 /** Browser en systeem, kort: "Edge/Windows", "Safari/iPhone". */
@@ -94,7 +96,7 @@ export class Peer {
   private local: Signal | null = null;
   private role: 'host' | 'join' = 'host';
   /** Laatste stand van de verbindingscontroles; na een mislukking gooit de browser die weg. */
-  private checks = { sent: 0, answered: 0, received: 0, pairs: '' };
+  private checks = { sent: 0, answered: 0, received: 0, pairs: '', sockets: '', seen: '' };
   private poll: ReturnType<typeof setInterval>;
   private remote: Signal | null = null;
 
@@ -126,8 +128,13 @@ export class Peer {
     let answered = 0;
     let received = 0;
     const states: Record<string, number> = {};
+    const sockets = new Set<string>();
+    const seen = new Set<string>();
     try {
       (await this.pc.getStats()).forEach((r) => {
+        // Waar luistert de browser echt, en welke afzenders kent hij (prflx = onverwacht adres)?
+        if (r.type === 'local-candidate' && r.candidateType === 'host' && r.protocol === 'udp') sockets.add(`${mask(r.address ?? r.ip)}:${r.port}`);
+        if (r.type === 'remote-candidate') seen.add(`${mask(r.address ?? r.ip)}:${r.port} ${r.candidateType}`);
         if (r.type !== 'candidate-pair') return;
         sent += r.requestsSent ?? 0;
         answered += r.responsesReceived ?? 0;
@@ -141,7 +148,7 @@ export class Peer {
     const pairs = Object.entries(states)
       .map(([st, n]) => `${n}× ${st}`)
       .join(', ');
-    this.checks = { sent, answered, received, pairs };
+    this.checks = { sent, answered, received, pairs, sockets: [...sockets].join(', '), seen: [...seen].join(', ') };
   }
 
   /** Toestel 1: maakt de eerste code (aanbod). */
@@ -185,13 +192,15 @@ export class Peer {
    */
   async diagnostics(): Promise<string> {
     await this.measure();
-    const { sent, answered, received, pairs } = this.checks;
+    const { sent, answered, received, pairs, sockets, seen } = this.checks;
     return [
       `rol: ${this.role === 'host' ? 'toont code' : 'scant code'} · ${platform()}`,
       `dit toestel: ${describe(this.local)}`,
       `ander toestel: ${describe(this.remote)}`,
       `checks: ${sent} verstuurd, ${answered} beantwoord, ${received} ontvangen`,
       `paren: ${pairs || 'geen'}`,
+      `luistert op: ${sockets || '?'}`,
+      `kent: ${seen || '?'}`,
       `ICE: ${this.pc.iceConnectionState}, verbinding: ${this.pc.connectionState}`,
     ].join('\n');
   }
