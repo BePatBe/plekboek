@@ -62,13 +62,26 @@ async function withCamera<T>(fn: () => Promise<T>): Promise<T> {
   }
 }
 
-/** Korte samenvatting van de adressen in een code, bijv. "2× lokaal IP, 1× .local, 1× STUN". */
+/** Openbaar IP-adres deels verbergen; lokale adressen (192.168…, 10…, IPv6 link-local) blijven zichtbaar. */
+function mask(address: string): string {
+  if (/^(10\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.|169\.254\.)/.test(address) || address.endsWith('.local')) return address;
+  if (address.includes(':')) return address.split(':').slice(0, 2).join(':') + ':…';
+  return address.split('.').slice(0, 2).join('.') + '.x.x';
+}
+
+/** Adressen in een code, bijv. "192.168.1.20 (lokaal), 84.85.x.x (STUN)". */
 function describe(s: Signal | null): string {
   if (!s) return '–';
-  const ip = s.candidates.filter((c) => c.kind === 'host' && !c.address.endsWith('.local')).length;
-  const mdns = s.candidates.filter((c) => c.address.endsWith('.local')).length;
-  const stun = s.candidates.filter((c) => c.kind === 'srflx').length;
-  return `${ip}× IP, ${mdns}× .local, ${stun}× STUN`;
+  if (!s.candidates.length) return 'geen adressen';
+  return s.candidates.map((c) => `${mask(c.address)} (${c.kind === 'host' ? 'lokaal' : 'STUN'})`).join(', ');
+}
+
+/** Browser en systeem, kort: "Edge/Windows", "Safari/iPhone". */
+function platform(): string {
+  const ua = navigator.userAgent;
+  const browser = /Edg\//.test(ua) ? 'Edge' : /SamsungBrowser/.test(ua) ? 'Samsung' : /CriOS|Chrome\//.test(ua) ? 'Chrome' : /FxiOS|Firefox/.test(ua) ? 'Firefox' : /Safari/.test(ua) ? 'Safari' : '?';
+  const os = /iPhone|iPad/.test(ua) ? 'iOS' : /Android/.test(ua) ? 'Android' : /Windows/.test(ua) ? 'Windows' : /Mac/.test(ua) ? 'macOS' : '?';
+  return `${browser}/${os}`;
 }
 
 export class Peer {
@@ -79,6 +92,10 @@ export class Peer {
   private inbox: string[] = [];
   private listener: ((data: string) => void) | null = null;
   private local: Signal | null = null;
+  private role: 'host' | 'join' = 'host';
+  /** Laatste stand van de verbindingscontroles; na een mislukking gooit de browser die weg. */
+  private checks = { sent: 0, answered: 0, received: 0, pairs: '' };
+  private poll: ReturnType<typeof setInterval>;
   private remote: Signal | null = null;
 
   private constructor(
@@ -98,8 +115,33 @@ export class Peer {
     if (channel) ready(channel);
     else pc.addEventListener('datachannel', (e) => ready(e.channel), { once: true });
     pc.addEventListener('connectionstatechange', () => {
-      if (pc.connectionState === 'failed') this.fail(new PeerFailure('noConnection', this.diagnostics()));
+      if (pc.connectionState === 'failed') this.failWithDetails();
+      if (pc.connectionState === 'connected' || pc.connectionState === 'closed') clearInterval(this.poll);
     });
+    this.poll = setInterval(() => this.measure(), 1000);
+  }
+
+  private async measure() {
+    let sent = 0;
+    let answered = 0;
+    let received = 0;
+    const states: Record<string, number> = {};
+    try {
+      (await this.pc.getStats()).forEach((r) => {
+        if (r.type !== 'candidate-pair') return;
+        sent += r.requestsSent ?? 0;
+        answered += r.responsesReceived ?? 0;
+        received += r.requestsReceived ?? 0;
+        states[r.state] = (states[r.state] ?? 0) + 1;
+      });
+    } catch {
+      return; // geen statistieken beschikbaar
+    }
+    if (sent + received === 0 && this.checks.sent + this.checks.received > 0) return; // al opgeruimd
+    const pairs = Object.entries(states)
+      .map(([st, n]) => `${n}× ${st}`)
+      .join(', ');
+    this.checks = { sent, answered, received, pairs };
   }
 
   /** Toestel 1: maakt de eerste code (aanbod). */
@@ -121,6 +163,7 @@ export class Peer {
     return withCamera(async () => {
       const pc = new RTCPeerConnection({ iceServers: ICE_SERVERS });
       const peer = new Peer(pc, null);
+      peer.role = 'join';
       peer.remote = offer;
       await pc.setRemoteDescription({ type: 'offer', sdp: toSdp(offer) });
       await pc.setLocalDescription(await pc.createAnswer());
@@ -136,13 +179,25 @@ export class Peer {
     await this.pc.setRemoteDescription({ type: 'answer', sdp: toSdp(this.remote) });
   }
 
-  /** Technische details voor de foutmelding. */
-  diagnostics(): string {
+  /**
+   * Technische details voor de foutmelding: rol, platform, adressen en hoeveel
+   * verbindingscontroles (STUN-checks) er heen en terug zijn gegaan.
+   */
+  async diagnostics(): Promise<string> {
+    await this.measure();
+    const { sent, answered, received, pairs } = this.checks;
     return [
+      `rol: ${this.role === 'host' ? 'toont code' : 'scant code'} · ${platform()}`,
       `dit toestel: ${describe(this.local)}`,
       `ander toestel: ${describe(this.remote)}`,
+      `checks: ${sent} verstuurd, ${answered} beantwoord, ${received} ontvangen`,
+      `paren: ${pairs || 'geen'}`,
       `ICE: ${this.pc.iceConnectionState}, verbinding: ${this.pc.connectionState}`,
-    ].join(' · ');
+    ].join('\n');
+  }
+
+  private failWithDetails() {
+    this.diagnostics().then((d) => this.fail(new PeerFailure('noConnection', d)));
   }
 
   /**
@@ -152,7 +207,7 @@ export class Peer {
    */
   async exchange(onProgress?: (step: 'connected' | 'received' | 'merged') => void): Promise<ImportSummary> {
     const waitMs = this.pc.remoteDescription?.type === 'answer' ? CONNECT_AFTER_ACCEPT_MS : CONNECT_WHILE_WAITING_MS;
-    const timer = setTimeout(() => this.fail(new PeerFailure('noConnection', this.diagnostics())), waitMs);
+    const timer = setTimeout(() => this.failWithDetails(), waitMs);
     let ch: RTCDataChannel;
     try {
       ch = await this.channel;
@@ -167,6 +222,7 @@ export class Peer {
   }
 
   close() {
+    clearInterval(this.poll);
     this.pc.close();
   }
 }
