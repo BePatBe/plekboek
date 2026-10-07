@@ -119,7 +119,7 @@ describe('import', () => {
     if (!parsed.ok) throw new Error(parsed.error);
     const summary = await applyImport(parsed.data, 'merge');
 
-    expect(summary).toMatchObject({ added: 1, updated: 1, unchanged: 1, skipped: 0, tagsAdded: 1, settings: null });
+    expect(summary).toMatchObject({ added: 1, updated: 1, unchanged: 1, skipped: 0, tagsAdded: 1, tagsUpdated: 0, tagsDeleted: 0, settings: null });
     expect((await db.notes.get(n0.id))!.title).toBe('Nieuwer');
     expect((await db.notes.get(n0.id))!.tagId).toBe(vogels.id);
     expect((await db.notes.get(n1.id))!.title).toBe(local.find((n) => n.id === n1.id)!.title);

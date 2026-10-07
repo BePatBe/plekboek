@@ -131,7 +131,17 @@ export function SyncScreen() {
                 tn('peer.sumDeleted', step.summary.deleted),
               ].join(', ')}
             </p>
+            <p>
+              {t('peer.sumTags', {
+                list: [
+                  tn('peer.sumTagsAdded', step.summary.tagsAdded),
+                  tn('peer.sumUpdated', step.summary.tagsUpdated),
+                  tn('peer.sumDeleted', step.summary.tagsDeleted),
+                ].join(', '),
+              })}
+            </p>
             <p class="muted small">{t('peer.doneHint')}</p>
+            <p class="muted small">{t('peer.settingsLocal')}</p>
             <button type="button" class="btn btn-primary btn-block" onClick={() => goBack('#/settings')}>
               {t('common.done')}
             </button>

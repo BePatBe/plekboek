@@ -68,6 +68,10 @@ export interface ImportSummary {
   deleted: number;
   skipped: number;
   tagsAdded: number;
+  /** bestaande tags die hier zijn overschreven door een nieuwere versie (naam, kleur of sjabloon) */
+  tagsUpdated: number;
+  /** lokaal verwijderde tags omdat ze elders zijn verwijderd */
+  tagsDeleted: number;
   /** nieuwe instellingen (alleen bij vervangen), zodat de app ze direct kan toepassen */
   settings: Settings | null;
 }
@@ -86,7 +90,7 @@ const key = (name: string) => name.toLocaleLowerCase();
  */
 export async function applyImport(data: ParsedBackup, mode: ImportMode): Promise<ImportSummary> {
   return db.transaction('rw', [db.notes, db.tags, db.deletions, db.settings], async () => {
-    const summary: ImportSummary = { added: 0, updated: 0, unchanged: 0, deleted: 0, skipped: data.invalid, tagsAdded: 0, settings: null };
+    const summary: ImportSummary = { added: 0, updated: 0, unchanged: 0, deleted: 0, skipped: data.invalid, tagsAdded: 0, tagsUpdated: 0, tagsDeleted: 0, settings: null };
     const now = toLocalIso();
 
     if (mode === 'replace') {
@@ -119,6 +123,7 @@ export async function applyImport(data: ParsedBackup, mode: ImportMode): Promise
       if (gone(local)) {
         await table.delete(d.id);
         if (d.kind === 'note') summary.deleted++;
+        else summary.tagsDeleted++;
       } else await revive(d.id);
     }
 
@@ -138,6 +143,7 @@ export async function applyImport(data: ParsedBackup, mode: ImportMode): Promise
           const clash = byName.get(key(t.name));
           const next = clash && clash.id !== t.id ? { ...t, name: sameId.name } : t;
           await db.tags.put(next);
+          summary.tagsUpdated++;
           byName.delete(key(sameId.name));
           byName.set(key(next.name), next);
           byId.set(t.id, next);

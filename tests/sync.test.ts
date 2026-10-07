@@ -123,6 +123,19 @@ describe('samenvoegen tussen toestellen', () => {
     expect((await db.notes.get(n.id))!.tagId).toBeNull();
   });
 
+  it('telt bijgewerkte en verwijderde tags in de samenvatting', async () => {
+    const a = await createTag('Vogels');
+    const b = await createTag('Strand');
+    const summary = await mergeFrom(
+      otherDevice({
+        tags: [{ ...a, template: '<p>Weer:</p>', updatedAt: later(a.updatedAt) }],
+        deletions: [{ id: b.id, kind: 'tag', deletedAt: later(b.updatedAt) }],
+      }),
+    );
+    expect(summary).toMatchObject({ tagsAdded: 0, tagsUpdated: 1, tagsDeleted: 1 });
+    expect((await db.tags.get(a.id))!.template).toBe('<p>Weer:</p>');
+  });
+
   it('tag verwijderen laat een tombstone achter die meegaat in de export', async () => {
     const tag = await createTag('Strand');
     await deleteTag(tag.id, null);
