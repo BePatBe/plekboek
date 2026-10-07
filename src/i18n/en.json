@@ -41,7 +41,7 @@
 
   "filter.title": "Filters",
   "filter.tag": "Tag",
-  "filter.allTags": "All tags",
+  "filter.tags": "Tags (none selected = all)",
   "filter.minRating": "Minimum rating",
   "filter.period": "Period",
   "filter.from": "From",
@@ -49,6 +49,7 @@
   "filter.timeOfDay": "Time of day",
   "filter.mapArea": "Only in map area",
   "filter.mapAreaShort": "Map area",
+  "filter.today": "today",
   "filter.clear": "Clear filters",
 
   "place.search": "Search address or place",
@@ -145,6 +146,10 @@
   "settings.dark": "Dark",
   "settings.themeHint": "System follows your device setting",
   "settings.tags": "Manage tags",
+  "settings.searchDefaults": "Default filters",
+  "settings.searchDefaultsHint": "The search screen opens with these. What you pick in the filter panel applies until you close the app.",
+  "settings.periodFrom": "Period from",
+  "settings.untilToday": "until today",
   "settings.radius": "\"Same place\" radius",
   "settings.radiusHint": "Notes within this radius count as one place",
   "settings.backup": "Backup and sync",

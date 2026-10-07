@@ -2,15 +2,16 @@ import { useEffect, useMemo, useRef, useState } from 'preact/hooks';
 import { useLiveQuery } from '../db/live';
 import { allNotes, EMPTY_CRITERIA, filterNotes, NO_TAG, sortNotes, type Bounds, type Criteria, type SortMode } from '../db/notes';
 import { allTags } from '../db/tags';
-import type { Note, Rating } from '../db/types';
+import type { Note, Rating, Settings, Tag } from '../db/types';
 import { getPosition, getPositionIfAllowed, positionStore } from '../geo/gps';
 import { searchPlace, type PlaceResult } from '../geo/geocode';
 import { fmtNumber, fmtObserved, langStore, t, useLang } from '../i18n';
 import { createStore, useStore } from '../lib/store';
-import { TIMES_OF_DAY, daysSince, type TimeOfDay } from '../lib/time';
+import { TIMES_OF_DAY, daysSince, toLocalIso, type TimeOfDay } from '../lib/time';
 import { navigate } from '../router';
 import { installedStore, installPromptStore, isIOS, lastBackupAt, local, onlineStore, promptInstall, settingsStore, updateSettings } from '../state';
 import { CardWheel } from '../components/CardWheel';
+import { TagFilter } from '../components/TagFilter';
 import { Header, StarInput, Toast } from '../components/common';
 import { Icon } from '../components/Icon';
 import { IosInstallSteps } from '../components/InstallHelp';
@@ -29,6 +30,21 @@ interface SearchState {
 const searchState = createStore<SearchState>({ criteria: EMPTY_CRITERIA, inMapArea: false, sort: 'rating', activeId: null, view: null });
 const patch = (p: Partial<SearchState>) => searchState.set({ ...searchState.get(), ...p });
 
+/* Standaardfilters uit de instellingen: bij het opstarten en zodra ze daar veranderen.
+   Wat je daarna in het filterpaneel kiest, gaat er voor deze sessie overheen. */
+let appliedDefaults = '';
+function applySearchDefaults(s: Settings) {
+  const d = s.searchDefaults;
+  const key = JSON.stringify(d ?? null);
+  if (key === appliedDefaults) return;
+  appliedDefaults = key;
+  if (!d) return;
+  // De periode loopt t/m vandaag: alleen een begindatum, geen einddatum.
+  patch({ criteria: { ...searchState.get().criteria, tagIds: d.tagIds, from: d.from, to: null }, inMapArea: d.inMapArea });
+}
+applySearchDefaults(settingsStore.get());
+settingsStore.subscribe(applySearchDefaults);
+
 export function SearchScreen() {
   useLang();
   const state = useStore(searchState);
@@ -45,6 +61,13 @@ export function SearchScreen() {
 
   const { criteria, inMapArea, sort } = state;
   const setCriteria = (c: Partial<Criteria>) => patch({ criteria: { ...criteria, ...c } });
+
+  // Tags die intussen zijn verwijderd, vallen uit het (standaard)filter.
+  useEffect(() => {
+    if (!tagList) return;
+    const kept = criteria.tagIds.filter((id) => id === NO_TAG || tags.has(id));
+    if (kept.length !== criteria.tagIds.length) setCriteria({ tagIds: kept });
+  }, [tagList, criteria.tagIds]);
 
   const results = useMemo(() => {
     if (!notes) return null;
@@ -88,7 +111,7 @@ export function SearchScreen() {
 
   const activeIndex = results ? results.findIndex((n) => n.id === state.activeId) : -1;
   const filterCount =
-    (criteria.tagId ? 1 : 0) + (criteria.minRating ? 1 : 0) + (criteria.from || criteria.to ? 1 : 0) + (criteria.timesOfDay.length ? 1 : 0) + (inMapArea ? 1 : 0);
+    (criteria.tagIds.length ? 1 : 0) + (criteria.minRating ? 1 : 0) + (criteria.from || criteria.to ? 1 : 0) + (criteria.timesOfDay.length ? 1 : 0) + (inMapArea ? 1 : 0);
 
   return (
     <div class="screen search-screen">
@@ -115,7 +138,7 @@ export function SearchScreen() {
             criteria={criteria}
             inMapArea={inMapArea}
             count={filterCount}
-            tagName={criteria.tagId === NO_TAG ? t('tag.none') : tags.get(criteria.tagId ?? '')?.name}
+            tagNames={criteria.tagIds.map((id) => (id === NO_TAG ? t('tag.none') : tags.get(id)?.name)).filter((x): x is string => !!x)}
             open={filtersOpen}
             onToggle={() => setFiltersOpen(!filtersOpen)}
             onClear={(c, area) => (setCriteria(c), area !== undefined && patch({ inMapArea: area }))}
@@ -194,18 +217,18 @@ function FilterChips(props: {
   criteria: Criteria;
   inMapArea: boolean;
   count: number;
-  tagName: string | undefined;
+  tagNames: string[];
   open: boolean;
   onToggle: () => void;
   onClear: (c: Partial<Criteria>, inMapArea?: boolean) => void;
 }) {
-  const { criteria: c, inMapArea, count, tagName, open, onToggle, onClear } = props;
+  const { criteria: c, inMapArea, count, tagNames, open, onToggle, onClear } = props;
   const chip = (label: string, clear: () => void) => (
     <button type="button" class="chip chip-active" onClick={clear} aria-label={`${label} — ${t('common.remove')}`}>
       {label} <Icon name="close" size={16} />
     </button>
   );
-  const period = c.from || c.to ? `${c.from ? fmtObserved(c.from, 'dayMonth') : '…'} – ${c.to ? fmtObserved(c.to, 'dayMonth') : '…'}` : null;
+  const period = c.from || c.to ? `${c.from ? fmtObserved(c.from, 'dayMonth') : '…'} – ${c.to ? fmtObserved(c.to, 'dayMonth') : c.from ? t('filter.today') : '…'}` : null;
   return (
     <div class="chips" role="group" aria-label={t('filter.title')}>
       <button type="button" class={`chip ${count ? 'chip-active' : ''}`} aria-expanded={open} onClick={onToggle}>
@@ -213,7 +236,7 @@ function FilterChips(props: {
         {count ? ` (${count})` : ''}
       </button>
       {c.minRating ? chip(`★ ${c.minRating}+`, () => onClear({ minRating: null })) : null}
-      {c.tagId ? chip(tagName ?? t('filter.tag'), () => onClear({ tagId: null })) : (
+      {tagNames.length ? chip(tagNames.join(', '), () => onClear({ tagIds: [] })) : (
         <button type="button" class="chip" onClick={onToggle}>{t('filter.tag')}</button>
       )}
       {period ? chip(period, () => onClear({ from: null, to: null })) : (
@@ -232,28 +255,21 @@ function FilterChips(props: {
 function FilterPanel(props: {
   criteria: Criteria;
   inMapArea: boolean;
-  tags: { id: string; name: string }[];
+  tags: Tag[];
   onChange: (c: Partial<Criteria>) => void;
   onMapArea: (v: boolean) => void;
   onClose: () => void;
 }) {
   const { criteria: c, inMapArea, tags, onChange, onMapArea, onClose } = props;
+  const today = toLocalIso().slice(0, 10);
   const toggleTod = (x: TimeOfDay) =>
     onChange({ timesOfDay: c.timesOfDay.includes(x) ? c.timesOfDay.filter((y) => y !== x) : [...c.timesOfDay, x] });
   return (
     <div class="filter-panel card" onKeyDown={(e) => e.key === 'Escape' && onClose()}>
-      <label class="field">
-        <span class="label">{t('filter.tag')}</span>
-        <select class="input" value={c.tagId ?? ''} onChange={(e) => onChange({ tagId: e.currentTarget.value || null })}>
-          <option value="">{t('filter.allTags')}</option>
-          <option value={NO_TAG}>{t('tag.none')}</option>
-          {tags.map((x) => (
-            <option key={x.id} value={x.id}>
-              {x.name}
-            </option>
-          ))}
-        </select>
-      </label>
+      <div class="field">
+        <span class="label">{t('filter.tags')}</span>
+        <TagFilter tags={tags} value={c.tagIds} onChange={(tagIds) => onChange({ tagIds })} />
+      </div>
       <div class="field">
         <span class="label">{t('filter.minRating')}</span>
         <StarInput value={c.minRating} onChange={(r: Rating | null) => onChange({ minRating: r })} />
@@ -263,7 +279,8 @@ function FilterPanel(props: {
         <div class="row gap">
           <input type="date" class="input" aria-label={t('filter.from')} value={c.from ?? ''} onInput={(e) => onChange({ from: e.currentTarget.value || null })} />
           <span>–</span>
-          <input type="date" class="input" aria-label={t('filter.to')} value={c.to ?? ''} onInput={(e) => onChange({ to: e.currentTarget.value || null })} />
+          {/* Leeg = t/m vandaag; daarom staat vandaag erin, en telt die niet als extra filter. */}
+          <input type="date" class="input" aria-label={t('filter.to')} value={c.to ?? today} onInput={(e) => onChange({ to: e.currentTarget.value && e.currentTarget.value !== today ? e.currentTarget.value : null })} />
         </div>
       </div>
       <div class="field">

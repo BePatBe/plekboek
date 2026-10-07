@@ -33,6 +33,16 @@ export interface Settings {
   backupReminderDays: number;
   /** Laatste geslaagde synchronisatie met een ander toestel (telt ook als back-up). */
   lastSyncAt?: string;
+  /** Filters waarmee het zoekscherm opent; het filterpaneel gaat er per sessie overheen. */
+  searchDefaults?: SearchDefaults;
+}
+
+export interface SearchDefaults {
+  /** leeg = alle tags; '__none__' staat voor notities zonder tag */
+  tagIds: string[];
+  /** yyyy-mm-dd; de periode loopt dan t/m vandaag */
+  from: string | null;
+  inMapArea: boolean;
 }
 
 export const DEFAULT_SETTINGS: Settings = {

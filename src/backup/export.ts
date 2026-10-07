@@ -19,6 +19,7 @@ export async function buildBackup(now = new Date()): Promise<BackupFile> {
         samePlaceRadiusM: s.samePlaceRadiusM,
         backupReminderDays: s.backupReminderDays,
         ...(s.defaultMapCenter && { defaultMapCenter: s.defaultMapCenter }),
+        ...(s.searchDefaults && { searchDefaults: s.searchDefaults }),
       },
     };
   });

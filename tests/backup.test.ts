@@ -5,6 +5,7 @@ import { createTag } from '../src/db/tags';
 import { loadSettings, saveSettings } from '../src/db/settings';
 import { buildBackup, backupFileName } from '../src/backup/export';
 import { applyImport, parseBackup } from '../src/backup/import';
+import { validateSettings } from '../src/backup/schema';
 import { input, resetDb } from './helpers';
 
 beforeEach(resetDb);
@@ -55,6 +56,13 @@ describe('round-trip', () => {
 });
 
 describe('import', () => {
+  it('neemt geldige standaardfilters over en negeert ongeldige', () => {
+    const ok = { tagIds: ['t1', '__none__'], from: '2026-03-01', inMapArea: true };
+    expect(validateSettings({ searchDefaults: ok }).searchDefaults).toEqual(ok);
+    expect(validateSettings({ searchDefaults: { tagIds: [], from: '1 maart' } }).searchDefaults).toBeUndefined();
+    expect(validateSettings({ searchDefaults: { tagIds: [5] } }).searchDefaults).toBeUndefined();
+  });
+
   it('weigert andere bestanden en nieuwere versies netjes', () => {
     expect(parseBackup('{niet json')).toEqual({ ok: false, error: 'invalidJson' });
     expect(parseBackup('{"app":"iets"}')).toEqual({ ok: false, error: 'notPlekboek' });

@@ -87,8 +87,9 @@ describe('zoeken en sorteren', () => {
     expect(ids({ query: 'cafe' })).toEqual([a.title]);
     expect(ids({ query: 'VOGELS' })).toEqual([b.title]); // tagnaam
     expect(ids({ query: 'lepel hut' })).toEqual([b.title]);
-    expect(ids({ tagId: vogels.id })).toEqual([b.title]);
-    expect(ids({ tagId: NO_TAG })).toEqual([a.title, c.title].sort());
+    expect(ids({ tagIds: [vogels.id] })).toEqual([b.title]);
+    expect(ids({ tagIds: [NO_TAG] })).toEqual([a.title, c.title].sort());
+    expect(ids({ tagIds: [vogels.id, NO_TAG] })).toEqual([a.title, b.title, c.title].sort());
     expect(ids({ minRating: 3 })).toEqual([b.title]);
     expect(ids({ from: '2026-08-01', to: '2026-08-31' })).toEqual([a.title]);
     expect(ids({ timesOfDay: ['night'] })).toEqual([c.title]);

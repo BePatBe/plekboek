@@ -41,7 +41,7 @@
 
   "filter.title": "Filters",
   "filter.tag": "Tag",
-  "filter.allTags": "Alle tags",
+  "filter.tags": "Tags (niets gekozen = alle)",
   "filter.minRating": "Minimale beoordeling",
   "filter.period": "Periode",
   "filter.from": "Van",
@@ -49,6 +49,7 @@
   "filter.timeOfDay": "Tijdstip",
   "filter.mapArea": "Alleen in kaartgebied",
   "filter.mapAreaShort": "Kaartgebied",
+  "filter.today": "vandaag",
   "filter.clear": "Filters wissen",
 
   "place.search": "Adres of plaats zoeken",
@@ -145,6 +146,10 @@
   "settings.dark": "Donker",
   "settings.themeHint": "Systeem volgt de instelling van je toestel",
   "settings.tags": "Tags beheren",
+  "settings.searchDefaults": "Standaardfilters",
+  "settings.searchDefaultsHint": "Hiermee opent het zoekscherm. Wat je in het filterpaneel kiest, geldt tot je de app sluit.",
+  "settings.periodFrom": "Periode vanaf",
+  "settings.untilToday": "t/m vandaag",
   "settings.radius": "\"Zelfde plek\"-straal",
   "settings.radiusHint": "Notities binnen deze straal tellen als één plek",
   "settings.backup": "Back-up en synchronisatie",

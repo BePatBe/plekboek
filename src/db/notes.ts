@@ -53,8 +53,8 @@ export interface Bounds {
 
 export interface Criteria {
   query: string;
-  /** null = alle tags; NO_TAG = alleen notities zonder tag */
-  tagId: string | null;
+  /** leeg = alle tags; NO_TAG staat voor notities zonder tag */
+  tagIds: string[];
   minRating: Rating | null;
   /** yyyy-mm-dd, inclusief */
   from: string | null;
@@ -67,7 +67,7 @@ export const NO_TAG = '__none__';
 
 export const EMPTY_CRITERIA: Criteria = {
   query: '',
-  tagId: null,
+  tagIds: [],
   minRating: null,
   from: null,
   to: null,
@@ -78,7 +78,7 @@ export const EMPTY_CRITERIA: Criteria = {
 export function filterNotes(notes: Note[], tags: Map<string, Tag>, c: Criteria): Note[] {
   const words = fold(c.query.trim()).split(/\s+/).filter(Boolean);
   return notes.filter((n) => {
-    if (c.tagId === NO_TAG ? n.tagId !== null : c.tagId && n.tagId !== c.tagId) return false;
+    if (c.tagIds.length && !c.tagIds.includes(n.tagId ?? NO_TAG)) return false;
     if (c.minRating && (n.rating ?? 0) < c.minRating) return false;
     const date = n.observedAt.slice(0, 10);
     if (c.from && date < c.from) return false;

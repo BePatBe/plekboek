@@ -5,7 +5,7 @@ export const APP_ID = 'plekboek';
 /** `deletions` is een optionele toevoeging aan versie 1: oudere bestanden zonder dat veld blijven geldig. */
 export const SCHEMA_VERSION = 1;
 
-export type BackupSettings = Pick<Settings, 'language' | 'theme' | 'samePlaceRadiusM' | 'backupReminderDays' | 'defaultMapCenter'>;
+export type BackupSettings = Pick<Settings, 'language' | 'theme' | 'samePlaceRadiusM' | 'backupReminderDays' | 'defaultMapCenter' | 'searchDefaults'>;
 
 export interface BackupFile {
   app: typeof APP_ID;
@@ -78,6 +78,9 @@ export function validateSettings(raw: unknown): Partial<BackupSettings> {
   if (isNum(raw.backupReminderDays) && raw.backupReminderDays >= 0) out.backupReminderDays = Math.round(raw.backupReminderDays);
   const c = raw.defaultMapCenter;
   if (isObj(c) && isNum(c.lat) && isNum(c.lng) && isNum(c.zoom)) out.defaultMapCenter = { lat: c.lat, lng: c.lng, zoom: c.zoom };
+  const f = raw.searchDefaults;
+  if (isObj(f) && Array.isArray(f.tagIds) && f.tagIds.every(isStr) && optStr(f.from) && (!f.from || /^\d{4}-\d{2}-\d{2}$/.test(f.from as string)))
+    out.searchDefaults = { tagIds: f.tagIds.filter(Boolean), from: (f.from as string) || null, inMapArea: f.inMapArea === true };
   return out;
 }
 

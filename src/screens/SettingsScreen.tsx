@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from 'preact/hooks';
 import { useLiveQuery } from '../db/live';
 import { allTags, createTag, deleteTag, DuplicateTagError, tagCounts, updateTag } from '../db/tags';
-import type { Settings, Tag } from '../db/types';
+import type { SearchDefaults, Settings, Tag } from '../db/types';
+import { NO_TAG } from '../db/notes';
 import { exportBackup } from '../backup/export';
 import { applyImport, parseBackup, type ImportMode, type ParsedBackup } from '../backup/import';
 import { db } from '../db/db';
@@ -12,6 +13,7 @@ import { installedStore, installPromptStore, isIOS, lastBackupAt, promptInstall,
 import { Header, Modal, Section, Segmented, Toast } from '../components/common';
 import { Icon } from '../components/Icon';
 import { IosInstallSteps } from '../components/InstallHelp';
+import { TagFilter } from '../components/TagFilter';
 import { navigate } from '../router';
 
 export function SettingsScreen() {
@@ -52,6 +54,10 @@ export function SettingsScreen() {
 
         <Section title={t('settings.tags')}>
           <TagManager />
+        </Section>
+
+        <Section title={t('settings.searchDefaults')}>
+          <SearchDefaultsForm settings={s} />
         </Section>
 
         <Section title={t('settings.radius')}>
@@ -117,6 +123,36 @@ export function SettingsScreen() {
       </div>
       {toast && <Toast message={toast} onDone={() => setToast('')} />}
     </div>
+  );
+}
+
+/* ---------- standaardfilters ---------- */
+
+function SearchDefaultsForm({ settings }: { settings: Settings }) {
+  const tags = useLiveQuery(allTags, []) ?? [];
+  const d: SearchDefaults = settings.searchDefaults ?? { tagIds: [], from: null, inMapArea: false };
+  const set = (p: Partial<SearchDefaults>) => updateSettings({ searchDefaults: { ...d, ...p } });
+  // Verwijderde tags tellen niet meer mee.
+  const tagIds = d.tagIds.filter((id) => id === NO_TAG || tags.some((x) => x.id === id));
+  return (
+    <>
+      <p class="muted small">{t('settings.searchDefaultsHint')}</p>
+      <div class="field">
+        <span class="label">{t('filter.tags')}</span>
+        <TagFilter tags={tags} value={tagIds} onChange={(ids) => set({ tagIds: ids })} />
+      </div>
+      <div class="field">
+        <span class="label">{t('settings.periodFrom')}</span>
+        <div class="row gap">
+          <input type="date" class="input" aria-label={t('settings.periodFrom')} value={d.from ?? ''} onInput={(e) => set({ from: e.currentTarget.value || null })} />
+          <span class="muted">{t('settings.untilToday')}</span>
+        </div>
+      </div>
+      <label class="check">
+        <input type="checkbox" checked={d.inMapArea} onChange={(e) => set({ inMapArea: e.currentTarget.checked })} />
+        {t('filter.mapArea')}
+      </label>
+    </>
   );
 }
 
