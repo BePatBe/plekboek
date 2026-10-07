@@ -215,7 +215,7 @@ export function EditScreen({ id, params }: { id: string | null; params: URLSearc
     setState((s) => s && { ...s, form: s.base, restored: false });
   };
 
-  /** Tag kiezen; het sjabloon van die tag komt klaar te staan (zie SPEC §4.2, stap 5). */
+  /** Tag kiezen; het sjabloon van die tag komt klaar te staan (zie SPEC §4.2, stap 3). */
   const chooseTag = (tagId: string | null) => {
     const next = tags.find((x) => x.id === tagId);
     const prev = tags.find((x) => x.id === form.tagId);
@@ -326,7 +326,12 @@ export function EditScreen({ id, params }: { id: string | null; params: URLSearc
           <p class="muted small">{t('edit.dateHint')}</p>
         </Section>
 
-        <Section title={`3 · ${t('edit.titleField')}`}>
+        <Section title={`3 · ${t('edit.tag')}`}>
+          <TagPicker tags={tags} value={form.tagId} onChange={chooseTag} />
+          <p class="muted small">{t('edit.tagHint')}</p>
+        </Section>
+
+        <Section title={`4 · ${t('edit.titleField')}`}>
           <div class="input-wrap">
             <input
               class="input"
@@ -364,13 +369,8 @@ export function EditScreen({ id, params }: { id: string | null; params: URLSearc
           {titleState === 'offline' && !form.titleManual && <p class="muted small">{t('edit.titleOffline')}</p>}
         </Section>
 
-        <Section title={`4 · ${t('edit.text')}`}>
+        <Section title={`5 · ${t('edit.text')}`}>
           <RichEditor key={editorKey.current} value={form.text} onChange={(html) => set({ text: html })} label={t('edit.text')} />
-        </Section>
-
-        <Section title={`5 · ${t('edit.tag')}`}>
-          <TagPicker tags={tags} value={form.tagId} onChange={chooseTag} />
-          <p class="muted small">{t('edit.tagHint')}</p>
         </Section>
 
         <Section title={`6 · ${t('edit.rating')}`}>

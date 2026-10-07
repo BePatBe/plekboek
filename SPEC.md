@@ -182,19 +182,19 @@ Velden, van boven naar beneden:
    - Knoppen: *Gebruik GPS* / *Kies op kaart*. Tikken op de kaart verplaatst de pin en zet `locationSource = 'map'`.
    - Is de kaart offline niet beschikbaar, dan werkt GPS gewoon en toont de app de coördinaten als tekst.
 2. **Datum en tijd**: standaard nu, aanpasbaar via de native date/time-picker.
-3. **Titel** (optioneel): wordt automatisch voorgesteld op basis van de locatie en is altijd vrij aan te passen.
+3. **Tag**: een keuzelijst met de bestaande tags, plus *+ Nieuwe tag* om er direct een aan te maken. Heeft de gekozen tag een sjabloon, dan komt dat in de aantekening te staan: direct als die leeg is of nog het onveranderde sjabloon van de vorige tag bevat; anders vraagt de app of het sjabloon de tekst vervangt, eronder komt of niet wordt gebruikt.
+4. **Titel** (optioneel): wordt automatisch voorgesteld op basis van de locatie en is altijd vrij aan te passen.
    - **Eerst lokaal:** ligt er een eerdere notitie met een titel binnen `samePlaceRadiusM` (de "zelfde plek"-straal), dan neemt de app de titel van de dichtstbijzijnde over. Dit werkt ook offline en zorgt dat herhaalde bezoeken dezelfde naam krijgen.
    - **Anders online:** de app zoekt de plaatsnaam op via Nominatim reverse geocoding (in de taal van de app). De meest specifieke naam krijgt voorrang: naam van de plek/POI, dan straat, dan wijk/dorp, dan plaats. Bijvoorbeeld: "Vogelhut De Kiekendief" of "Dorpsstraat, Ootmarsum".
    - **Offline en geen eerdere notitie:** het veld blijft leeg. Zodra er weer verbinding is, verschijnt "Naam ophalen" als knop naast het veld.
    - Het voorstel wordt alleen ingevuld zolang de gebruiker de titel nog **niet zelf heeft aangepast**. Wordt de pin daarna verplaatst, dan wordt de automatische titel ververst; een handmatige titel blijft staan.
    - Een klein icoon (↻) naast het veld haalt het voorstel opnieuw op.
-4. **Aantekening**: een meerregelig tekstveld dat meegroeit, met **basisopmaak**.
+5. **Aantekening**: een meerregelig tekstveld dat meegroeit, met **basisopmaak**.
    - Werkbalk boven het veld (blijft zichtbaar boven het toetsenbord): **B** (vet), *I* (cursief), U (onderstrepen), • (opsommingslijst), 1. (genummerde lijst).
    - Een knop staat "aan" als de cursor in zo'n opmaak staat; nogmaals tikken zet de opmaak uit.
    - Sneltoetsen voor wie een toetsenbord gebruikt: Ctrl/⌘+B, I, U. Typ je "- " of "1. " aan het begin van een regel, dan begint automatisch een lijst.
    - Plakken van tekst uit andere apps: alle opmaak behalve de toegestane wordt verwijderd.
    - Editor: **Tiptap** (`@tiptap/core` + `starter-kit` + `extension-underline`), framework-onafhankelijk en goed op mobiel. Alles wat niet in de lijst hieronder staat, schakel je uit (koppen, code, citaten, enz.).
-5. **Tag**: een keuzelijst met de bestaande tags, plus *+ Nieuwe tag* om er direct een aan te maken. Heeft de gekozen tag een sjabloon, dan komt dat in de aantekening te staan: direct als die leeg is of nog het onveranderde sjabloon van de vorige tag bevat; anders vraagt de app of het sjabloon de tekst vervangt, eronder komt of niet wordt gebruikt.
 6. **Beoordeling**: 5 tikbare sterren; nogmaals tikken op dezelfde ster wist de beoordeling.
 
 Knoppen: **Opslaan** en **Annuleren** (met bevestiging als er wijzigingen zijn). Bij bewerken is er ook **Verwijderen** (met bevestiging).
