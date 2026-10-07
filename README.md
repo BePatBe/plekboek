@@ -32,6 +32,8 @@ De app gebruikt een relatieve `base` en hash-routing, dus hij werkt op elk pad (
 
 Twee toestellen gelijk houden: **Instellingen → Synchroniseren met ander toestel** (één QR-code scannen; de notities gaan versleuteld via de gratis doorgeefdienst ntfy.sh, die de inhoud niet kan lezen). Een back-up als bestand kan via **Exporteren/Importeren**.
 
+Gebruik wordt anoniem geteld met [GoatCounter](https://www.goatcounter.com) (geen cookies, geen persoonsgegevens): alleen *app geopend* (als geïnstalleerde app of in de browser) en *installatie*. Notities, locaties en tags worden nooit meegestuurd. Cijfers: https://plekboek.goatcounter.com
+
 ## Structuur
 
 ```
