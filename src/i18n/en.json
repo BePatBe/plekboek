@@ -20,6 +20,8 @@
   "common.save": "Save",
 
   "rating.label": "{n} out of 5 stars",
+  "rating.place": "Place",
+  "rating.activity": "Activity",
   "rating.none": "No rating",
 
   "tod.morning": "Morning",

@@ -77,7 +77,8 @@ interface Note {
   text: string;            // de aantekening als opgeschoonde HTML (zie "Opmaak" hieronder)
   textPlain: string;       // platte tekst afgeleid van `text`, voor zoeken en voorbeeldregels in lijsten
   tagId: string | null;    // precies 0 of 1 tag
-  rating: Rating | null;   // sterren; leeg toegestaan
+  rating: Rating | null;   // sterren voor de plek; leeg toegestaan
+  activityRating?: Rating | null; // sterren voor de activiteit; leeg toegestaan
   createdAt: string;       // ISO, automatisch
   updatedAt: string;       // ISO, automatisch bij elke wijziging
   // v2: attachmentIds?: string[];

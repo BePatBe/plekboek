@@ -11,7 +11,10 @@ export interface Note {
   text: string;
   textPlain: string;
   tagId: string | null;
+  /** beoordeling van de plek */
   rating: Rating | null;
+  /** beoordeling van de activiteit; ontbreekt bij oudere notities */
+  activityRating?: Rating | null;
   createdAt: string;
   updatedAt: string;
 }

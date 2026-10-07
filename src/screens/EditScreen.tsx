@@ -33,6 +33,7 @@ interface Form {
   text: string;
   tagId: string | null;
   rating: Rating | null;
+  activityRating: Rating | null;
 }
 
 type GpsState = 'idle' | 'locating' | 'ok' | GpsError;
@@ -41,7 +42,7 @@ const draftKey = (id: string | null) => `plekboek-draft:${id ?? 'new'}`;
 
 function freshForm(): Form {
   const { date, time } = toInputs(toLocalIso());
-  return { lat: null, lng: null, locationSource: 'gps', date, time, title: '', titleManual: false, text: '', tagId: null, rating: null };
+  return { lat: null, lng: null, locationSource: 'gps', date, time, title: '', titleManual: false, text: '', tagId: null, rating: null, activityRating: null };
 }
 
 function fromNote(n: Note): Form {
@@ -59,6 +60,7 @@ function fromNote(n: Note): Form {
     text: n.text,
     tagId: n.tagId,
     rating: n.rating,
+    activityRating: n.activityRating ?? null,
   };
 }
 
@@ -210,7 +212,7 @@ export function EditScreen({ id, params }: { id: string | null; params: URLSearc
     const errs: string[] = [];
     if (!pos) errs.push(t('edit.errorLocation'));
     const hasText = form.text.replace(/<[^>]*>/g, '').trim() !== '';
-    if (!hasText && !form.title.trim() && !form.rating) errs.push(t('edit.errorContent'));
+    if (!hasText && !form.title.trim() && !form.rating && !form.activityRating) errs.push(t('edit.errorContent'));
     setErrors(errs);
     if (errs.length || saving) return;
     setSaving(true);
@@ -226,6 +228,7 @@ export function EditScreen({ id, params }: { id: string | null; params: URLSearc
       text: form.text,
       tagId: form.tagId,
       rating: form.rating,
+      activityRating: form.activityRating,
     };
     try {
       const note = id ? await updateNote(id, input) : await createNote(input);
@@ -349,7 +352,12 @@ export function EditScreen({ id, params }: { id: string | null; params: URLSearc
 
         <Section title={`6 · ${t('edit.rating')}`}>
           <div class="center">
-            <StarInput value={form.rating} onChange={(rating) => set({ rating })} />
+            <div class="rating-input">
+              <span>{t('rating.place')}</span>
+              <StarInput label={t('rating.place')} value={form.rating} onChange={(rating) => set({ rating })} />
+              <span>{t('rating.activity')}</span>
+              <StarInput label={t('rating.activity')} value={form.activityRating} onChange={(activityRating) => set({ activityRating })} />
+            </div>
             <p class="muted small">{t('edit.ratingHint')}</p>
           </div>
         </Section>

@@ -3,7 +3,7 @@ import type { Note, Tag } from '../db/types';
 import { distance } from '../geo/distance';
 import type { Position } from '../geo/gps';
 import { fmtDistance, fmtObserved, t, useLang } from '../i18n';
-import { Stars, TagLabel, tagColor } from './common';
+import { Ratings, TagLabel, tagColor } from './common';
 import { Icon } from './Icon';
 
 /** Afstand tussen de middelpunten van twee kleine cards (incl. tussenruimte). */
@@ -197,13 +197,13 @@ function NoteCard({ note, tag, active, position, cardRef, onClick }: CardProps) 
       <div class="card-compact" aria-hidden={active}>
         <span class="dot" />
         <span class="title">{title}</span>
-        <Stars rating={note.rating} />
+        <Ratings note={note} stacked />
         <span class="date">{fmtObserved(note.observedAt, 'dayMonth')}</span>
       </div>
       <div class="card-full" aria-hidden={!active}>
         <div class="row between">
           <h3 class="title">{title}</h3>
-          <Stars rating={note.rating} size="md" />
+          <Ratings note={note} size="md" labeled stacked />
         </div>
         <div class="row gap meta">
           {tag && <TagLabel tag={tag} />}

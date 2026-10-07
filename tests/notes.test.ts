@@ -76,7 +76,7 @@ describe('tags', () => {
 describe('zoeken en sorteren', () => {
   it('filtert op tekst (accentongevoelig), tag, sterren, periode, tijdstip en kaartgebied', async () => {
     const vogels = await createTag('Vogels');
-    const a = await createNote(input({ title: 'Café de Brug', text: '<p>Koffie</p>', rating: 2, observedAt: '2026-08-01T20:00:00+02:00' }));
+    const a = await createNote(input({ title: 'Café de Brug', text: '<p>Koffie</p>', rating: 2, activityRating: 5, observedAt: '2026-08-01T20:00:00+02:00' }));
     const b = await createNote(input({ title: 'Hut', text: '<p>Lepelaars</p>', tagId: vogels.id, rating: 5 }));
     const c = await createNote(input({ title: 'Ver weg', lat: 40, lng: -3, rating: null, observedAt: '2026-01-01T03:00:00+01:00' }));
     const notes = await db.notes.toArray();
@@ -91,6 +91,7 @@ describe('zoeken en sorteren', () => {
     expect(ids({ tagIds: [NO_TAG] })).toEqual([a.title, c.title].sort());
     expect(ids({ tagIds: [vogels.id, NO_TAG] })).toEqual([a.title, b.title, c.title].sort());
     expect(ids({ minRating: 3 })).toEqual([b.title]);
+    expect(ids({ minActivityRating: 4 })).toEqual([a.title]);
     expect(ids({ from: '2026-08-01', to: '2026-08-31' })).toEqual([a.title]);
     expect(ids({ timesOfDay: ['night'] })).toEqual([c.title]);
     expect(ids({ timesOfDay: ['morning', 'evening'] })).toEqual([a.title, b.title].sort());

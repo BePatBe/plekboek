@@ -10,7 +10,7 @@ import { useStore } from '../lib/store';
 import { goBack, navigate } from '../router';
 import { settingsStore } from '../state';
 import { sanitize } from '../text/sanitize';
-import { Header, NotFound, Stars, TagLabel, tagColor } from '../components/common';
+import { Header, NotFound, Ratings, TagLabel, tagColor } from '../components/common';
 import { Icon } from '../components/Icon';
 import { PinMap } from '../components/map/PinMap';
 
@@ -50,7 +50,7 @@ export function ReadScreen({ id }: { id: string }) {
         <h2 class="note-title">{note.title || t('note.untitled')}</h2>
         <div class="row gap wrap">
           {tag && <TagLabel tag={tag} />}
-          <Stars rating={note.rating} size="md" />
+          <Ratings note={note} size="md" labeled />
         </div>
         <p class="muted row gap">
           <Icon name="calendar" size={18} />
@@ -152,7 +152,7 @@ function PlaceOverTime({ note, notes, radius }: { note: Note; notes: Note[]; rad
                 <strong>{fmtObserved(n.observedAt, 'short')}</strong> · {fmtObserved(n.observedAt, 'time')}
                 <span class="muted"> · {n.id === note.id ? t('place.here') : fmtDistance(distance)}</span>
               </span>
-              <Stars rating={n.rating} />
+              <Ratings note={n} stacked />
             </a>
           </li>
         ))}

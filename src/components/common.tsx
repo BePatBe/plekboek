@@ -7,9 +7,10 @@ import { onlineStore } from '../state';
 import { useStore } from '../lib/store';
 import { Icon } from './Icon';
 
-export function Stars({ rating, size = 'sm' }: { rating: Rating | null; size?: 'sm' | 'md' }) {
+export function Stars({ rating, size = 'sm', prefix }: { rating: Rating | null; size?: 'sm' | 'md'; prefix?: string }) {
   useLang();
-  const label = rating ? t('rating.label', { n: rating }) : t('rating.none');
+  const value = rating ? t('rating.label', { n: rating }) : t('rating.none');
+  const label = prefix ? `${prefix}: ${value}` : value;
   return (
     <span class={`stars stars-${size}`} role="img" aria-label={label}>
       {[1, 2, 3, 4, 5].map((i) => (
@@ -19,10 +20,45 @@ export function Stars({ rating, size = 'sm' }: { rating: Rating | null; size?: '
   );
 }
 
-export function StarInput({ value, onChange }: { value: Rating | null; onChange: (r: Rating | null) => void }) {
+/**
+ * Plek- en activiteitsbeoordeling samen: naast of onder elkaar (plek eerst), met of zonder naam ervoor.
+ * Zonder activiteitsbeoordeling alleen de plek, zoals voorheen.
+ */
+export function Ratings({
+  note,
+  size = 'sm',
+  labeled = false,
+  stacked = false,
+}: {
+  note: { rating: Rating | null; activityRating?: Rating | null };
+  size?: 'sm' | 'md';
+  labeled?: boolean;
+  stacked?: boolean;
+}) {
+  useLang();
+  const activity = note.activityRating ?? null;
+  if (!activity) return <Stars rating={note.rating} size={size} prefix={t('rating.place')} />;
+  const item = (name: string, r: Rating | null) =>
+    labeled ? (
+      <span class="rating-item">
+        <span class="muted small">{name}</span>
+        <Stars rating={r} size={size} prefix={name} />
+      </span>
+    ) : (
+      <Stars rating={r} size={size} prefix={name} />
+    );
+  return (
+    <span class={stacked ? 'ratings ratings-stacked' : 'ratings'}>
+      {item(t('rating.place'), note.rating)}
+      {item(t('rating.activity'), activity)}
+    </span>
+  );
+}
+
+export function StarInput({ value, onChange, label }: { value: Rating | null; onChange: (r: Rating | null) => void; label?: string }) {
   useLang();
   return (
-    <div class="star-input" role="radiogroup" aria-label={t('edit.rating')}>
+    <div class="star-input" role="radiogroup" aria-label={label ?? t('edit.rating')}>
       {([1, 2, 3, 4, 5] as Rating[]).map((i) => (
         <button
           type="button"

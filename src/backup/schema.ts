@@ -24,6 +24,7 @@ const isStr = (v: unknown): v is string => typeof v === 'string';
 const isNum = (v: unknown): v is number => typeof v === 'number' && Number.isFinite(v);
 const isIso = (v: unknown): v is string => isStr(v) && !Number.isNaN(Date.parse(v));
 const optStr = (v: unknown) => v === undefined || v === null || isStr(v);
+const optRating = (v: unknown) => v === undefined || v === null || (Number.isInteger(v) && (v as number) >= 1 && (v as number) <= 5);
 
 export function validateTag(raw: unknown): Tag | null {
   if (!isObj(raw)) return null;
@@ -37,15 +38,14 @@ export function validateTag(raw: unknown): Tag | null {
 /** Valideert en schoont een notitie op; `text` gaat door DOMPurify en `textPlain` wordt opnieuw berekend. */
 export function validateNote(raw: unknown): Note | null {
   if (!isObj(raw)) return null;
-  const { id, lat, lng, accuracy, locationSource, observedAt, title, text, tagId, rating, createdAt, updatedAt } = raw;
+  const { id, lat, lng, accuracy, locationSource, observedAt, title, text, tagId, rating, activityRating, createdAt, updatedAt } = raw;
   if (!isStr(id) || !id) return null;
   if (!isNum(lat) || lat < -90 || lat > 90 || !isNum(lng) || lng < -180 || lng > 180) return null;
   if (accuracy !== undefined && accuracy !== null && (!isNum(accuracy) || accuracy < 0)) return null;
   if (locationSource !== 'gps' && locationSource !== 'map') return null;
   if (!isIso(observedAt) || !isIso(createdAt) || !isIso(updatedAt)) return null;
   if (!optStr(title) || !isStr(text ?? '') || !optStr(tagId)) return null;
-  if (rating !== null && rating !== undefined && !(Number.isInteger(rating) && (rating as number) >= 1 && (rating as number) <= 5))
-    return null;
+  if (!optRating(rating) || !optRating(activityRating)) return null;
   return cleanNote({
     id,
     lat,
@@ -57,6 +57,7 @@ export function validateNote(raw: unknown): Note | null {
     text: (text as string | undefined) ?? '',
     tagId: (tagId as string | null | undefined) || null,
     rating: (rating as Rating | null | undefined) ?? null,
+    ...(activityRating != null && { activityRating: activityRating as Rating }),
     createdAt,
     updatedAt,
   });

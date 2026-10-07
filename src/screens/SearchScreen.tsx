@@ -111,7 +111,7 @@ export function SearchScreen() {
 
   const activeIndex = results ? results.findIndex((n) => n.id === state.activeId) : -1;
   const filterCount =
-    (criteria.tagIds.length ? 1 : 0) + (criteria.minRating ? 1 : 0) + (criteria.from || criteria.to ? 1 : 0) + (criteria.timesOfDay.length ? 1 : 0) + (inMapArea ? 1 : 0);
+    (criteria.tagIds.length ? 1 : 0) + (criteria.minRating ? 1 : 0) + (criteria.minActivityRating ? 1 : 0) + (criteria.from || criteria.to ? 1 : 0) + (criteria.timesOfDay.length ? 1 : 0) + (inMapArea ? 1 : 0);
 
   return (
     <div class="screen search-screen">
@@ -235,7 +235,8 @@ function FilterChips(props: {
         <Icon name="filter" size={16} /> {t('filter.title')}
         {count ? ` (${count})` : ''}
       </button>
-      {c.minRating ? chip(`★ ${c.minRating}+`, () => onClear({ minRating: null })) : null}
+      {c.minRating ? chip(`${t('rating.place')} ★ ${c.minRating}+`, () => onClear({ minRating: null })) : null}
+      {c.minActivityRating ? chip(`${t('rating.activity')} ★ ${c.minActivityRating}+`, () => onClear({ minActivityRating: null })) : null}
       {tagNames.length ? chip(tagNames.join(', '), () => onClear({ tagIds: [] })) : (
         <button type="button" class="chip" onClick={onToggle}>{t('filter.tag')}</button>
       )}
@@ -272,7 +273,12 @@ function FilterPanel(props: {
       </div>
       <div class="field">
         <span class="label">{t('filter.minRating')}</span>
-        <StarInput value={c.minRating} onChange={(r: Rating | null) => onChange({ minRating: r })} />
+        <div class="rating-input rating-input-start">
+          <span>{t('rating.place')}</span>
+          <StarInput label={`${t('filter.minRating')}: ${t('rating.place')}`} value={c.minRating} onChange={(r: Rating | null) => onChange({ minRating: r })} />
+          <span>{t('rating.activity')}</span>
+          <StarInput label={`${t('filter.minRating')}: ${t('rating.activity')}`} value={c.minActivityRating} onChange={(r: Rating | null) => onChange({ minActivityRating: r })} />
+        </div>
       </div>
       <div class="field">
         <span class="label">{t('filter.period')}</span>

@@ -20,6 +20,8 @@
   "common.save": "Opslaan",
 
   "rating.label": "{n} van 5 sterren",
+  "rating.place": "Plek",
+  "rating.activity": "Activiteit",
   "rating.none": "Geen beoordeling",
 
   "tod.morning": "Ochtend",

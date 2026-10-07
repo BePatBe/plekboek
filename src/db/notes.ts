@@ -56,6 +56,7 @@ export interface Criteria {
   /** leeg = alle tags; NO_TAG staat voor notities zonder tag */
   tagIds: string[];
   minRating: Rating | null;
+  minActivityRating: Rating | null;
   /** yyyy-mm-dd, inclusief */
   from: string | null;
   to: string | null;
@@ -69,6 +70,7 @@ export const EMPTY_CRITERIA: Criteria = {
   query: '',
   tagIds: [],
   minRating: null,
+  minActivityRating: null,
   from: null,
   to: null,
   timesOfDay: [],
@@ -80,6 +82,7 @@ export function filterNotes(notes: Note[], tags: Map<string, Tag>, c: Criteria):
   return notes.filter((n) => {
     if (c.tagIds.length && !c.tagIds.includes(n.tagId ?? NO_TAG)) return false;
     if (c.minRating && (n.rating ?? 0) < c.minRating) return false;
+    if (c.minActivityRating && (n.activityRating ?? 0) < c.minActivityRating) return false;
     const date = n.observedAt.slice(0, 10);
     if (c.from && date < c.from) return false;
     if (c.to && date > c.to) return false;
@@ -105,13 +108,13 @@ export type SortMode = 'rating' | 'date';
 const instant = (iso: string) => new Date(iso).getTime();
 
 /**
- * 'rating': hoogste beoordeling eerst, bij gelijke beoordeling nieuwste eerst;
+ * 'rating': hoogste plekbeoordeling eerst, dan hoogste activiteitsbeoordeling, dan nieuwste eerst;
  * notities zonder beoordeling achteraan, onderling op datum. 'date': nieuwste eerst.
  */
 export function sortNotes(notes: Note[], mode: SortMode = 'rating'): Note[] {
   return [...notes].sort((a, b) => {
     if (mode === 'rating') {
-      const diff = (b.rating ?? 0) - (a.rating ?? 0);
+      const diff = (b.rating ?? 0) - (a.rating ?? 0) || (b.activityRating ?? 0) - (a.activityRating ?? 0);
       if (diff) return diff;
     }
     return instant(b.observedAt) - instant(a.observedAt);

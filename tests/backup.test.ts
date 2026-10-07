@@ -80,6 +80,7 @@ describe('import', () => {
         { ...good, id: 'b', lat: 91 },
         { ...good, id: 'c', lng: -181 },
         { ...good, id: 'd', rating: 6 },
+        { ...good, id: 'd2', activityRating: 0 },
         { ...good, id: 'e', observedAt: 'gisteren' },
         { ...good, id: 'f', locationSource: 'wifi' },
         'onzin',
@@ -91,7 +92,7 @@ describe('import', () => {
     expect(parsed.data.notes).toHaveLength(1);
     expect(parsed.data.notes[0].text).toBe('<p>ok</p>');
     expect(parsed.data.notes[0].textPlain).toBe('ok');
-    expect(parsed.data.invalid).toBe(7);
+    expect(parsed.data.invalid).toBe(8);
   });
 
   it('samenvoegen: nieuwste updatedAt wint en tags met dezelfde naam worden samengevoegd', async () => {
