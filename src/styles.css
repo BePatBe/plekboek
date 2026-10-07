@@ -740,6 +740,74 @@ input[type='range'] {
   box-shadow: var(--shadow-strong);
   animation: toast 3.2s ease forwards;
 }
+.toast-long {
+  animation-duration: 6.5s;
+}
+.toast:has(.toast-action) {
+  display: flex;
+  align-items: center;
+  white-space: nowrap;
+}
+.toast-action {
+  margin-left: 14px;
+  border: 0;
+  background: none;
+  padding: 4px 0;
+  font-weight: 700;
+  color: var(--accent-soft);
+}
+
+/* Selectie om in één keer te verwijderen */
+.select-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.select-bar .grow {
+  text-align: right;
+}
+.select-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  max-height: 55dvh;
+  overflow-y: auto;
+  border-top: 1px solid var(--line);
+  border-bottom: 1px solid var(--line);
+}
+.select-list li + li {
+  border-top: 1px solid var(--line);
+}
+.select-list label {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 48px;
+  padding: 4px 2px;
+  cursor: pointer;
+}
+.select-list input {
+  width: 20px;
+  height: 20px;
+  flex: none;
+  accent-color: var(--accent);
+}
+.select-list .title {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.select-list .date {
+  color: var(--muted);
+  font-size: 0.85rem;
+  white-space: nowrap;
+}
+.select-list li.off .title {
+  color: var(--muted);
+}
+
 @keyframes toast {
   0% {
     opacity: 0;

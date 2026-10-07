@@ -39,6 +39,29 @@ export async function deleteNote(id: string): Promise<void> {
     await db.deletions.put({ id, kind: 'note', deletedAt: toLocalIso() });
   });
 }
+
+/** Verwijdert meerdere notities in één keer; geeft ze terug zodat het ongedaan gemaakt kan worden. */
+export async function deleteNotes(ids: string[]): Promise<Note[]> {
+  return db.transaction('rw', db.notes, db.deletions, async () => {
+    const notes = (await db.notes.bulkGet(ids)).filter((n): n is Note => !!n);
+    const now = toLocalIso();
+    await db.notes.bulkDelete(notes.map((n) => n.id));
+    await db.deletions.bulkPut(notes.map((n) => ({ id: n.id, kind: 'note' as const, deletedAt: now })));
+    return notes;
+  });
+}
+
+/** Zet verwijderde notities terug. De nieuwe `updatedAt` zorgt dat ze ook na synchroniseren blijven bestaan. */
+export async function restoreNotes(notes: Note[]): Promise<void> {
+  await db.transaction('rw', db.notes, db.deletions, async () => {
+    // Tijden zijn per seconde: kies minstens een seconde ná de verwijdering, anders telt die bij samenvoegen nog.
+    const dels = await db.deletions.bulkGet(notes.map((n) => n.id));
+    const latest = Math.max(Date.now(), ...dels.map((d) => (d ? Date.parse(d.deletedAt) + 1000 : 0)));
+    const updatedAt = toLocalIso(new Date(latest));
+    await db.notes.bulkPut(notes.map((n) => ({ ...n, updatedAt })));
+    await db.deletions.bulkDelete(notes.map((n) => n.id));
+  });
+}
 export const getNote = (id: string) => db.notes.get(id);
 export const allNotes = () => db.notes.toArray();
 

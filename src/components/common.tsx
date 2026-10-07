@@ -181,10 +181,26 @@ export function Modal({ title, children, onClose }: { title: string; children: C
   );
 }
 
-export function Toast({ message, onDone }: { message: string; onDone: () => void }) {
+export function Toast({
+  message,
+  onDone,
+  action,
+  long = false,
+}: {
+  message: string;
+  onDone: () => void;
+  action?: { label: string; onClick: () => void };
+  /** langer zichtbaar, bijv. als er een actie in staat */
+  long?: boolean;
+}) {
   return (
-    <div class="toast" role="status" onAnimationEnd={onDone}>
+    <div class={`toast${long ? ' toast-long' : ''}`} role="status" onAnimationEnd={(e) => e.target === e.currentTarget && onDone()}>
       {message}
+      {action && (
+        <button type="button" class="toast-action" onClick={action.onClick}>
+          {action.label}
+        </button>
+      )}
     </div>
   );
 }

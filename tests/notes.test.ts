@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { db } from '../src/db/db';
-import { createNote, deleteNote, EMPTY_CRITERIA, filterNotes, getNote, NO_TAG, sortNotes, updateNote } from '../src/db/notes';
+import { createNote, deleteNote, deleteNotes, EMPTY_CRITERIA, filterNotes, getNote, NO_TAG, restoreNotes, sortNotes, updateNote } from '../src/db/notes';
 import { createTag, deleteTag, DuplicateTagError, tagCounts, updateTag } from '../src/db/tags';
 import { loadSettings, saveSettings } from '../src/db/settings';
 import { normalizeText, toPlain } from '../src/text/sanitize';
@@ -43,6 +43,21 @@ describe('notities', () => {
 
     await deleteNote(n.id);
     expect(await getNote(n.id)).toBeUndefined();
+  });
+
+  it('verwijdert een selectie in één keer en zet die terug', async () => {
+    const [a, b, c] = await Promise.all([createNote(input({ title: 'A' })), createNote(input({ title: 'B' })), createNote(input({ title: 'C' }))]);
+    const removed = await deleteNotes([a.id, c.id, 'bestaat-niet']);
+    expect(removed.map((n) => n.title).sort()).toEqual(['A', 'C']);
+    expect((await db.notes.toArray()).map((n) => n.id)).toEqual([b.id]);
+    expect((await db.deletions.toArray()).map((d) => d.id).sort()).toEqual([a.id, c.id].sort());
+
+    await restoreNotes(removed);
+    expect(await db.notes.count()).toBe(3);
+    expect(await db.deletions.count()).toBe(0);
+    const back = (await getNote(a.id))!;
+    expect(back.title).toBe('A');
+    expect(Date.parse(back.updatedAt)).toBeGreaterThan(Date.parse(a.updatedAt));
   });
 });
 

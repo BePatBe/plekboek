@@ -169,6 +169,7 @@ Onderin staat een navigatiebalk met drie knoppen: **Zoeken**, **+ Nieuw**, **Ins
   - Tik op een **kleine card**: die scrolt naar het midden en wordt actief. Tik op de **actieve card**: het leesscherm opent.
   - **Gekoppeld aan de kaart:** de marker van de actieve card wordt groter en gemarkeerd, en de kaart schuift er zo nodig naartoe. Tik je op een marker, dan scrolt de lijst naar die card.
   - Boven de cards staat een balkje met het aantal en de positie ("3 / 8 resultaten") en de sortering.
+  - **Selecteren** (icoon in dat balkje) opent een lijst van alle huidige resultaten met vinkjes, standaard alles aangevinkt, met *Alles* en *Niets*. *Verwijder N notities* verwijdert de selectie zonder extra vraag; daarna kan dat ruim 6 seconden met *Ongedaan maken* worden teruggedraaid. Teruggezette notities krijgen een nieuwe `updatedAt`, zodat synchroniseren ze niet alsnog verwijdert.
   - Standaardsortering: **1. beoordeling** (hoogste eerst), **2. datum/tijd** (`observedAt`, nieuwste eerst) bij gelijke beoordeling. Notities zonder beoordeling komen achteraan, onderling gesorteerd op datum/tijd.
   - Bij veel resultaten wordt de lijst gevirtualiseerd (alleen de cards rond de actieve card worden gerenderd).
   - Geen resultaten: één lege card met "Niets gevonden. Pas je zoekterm of filters aan."

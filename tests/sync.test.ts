@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { db } from '../src/db/db';
-import { createNote, deleteNote, updateNote } from '../src/db/notes';
+import { createNote, deleteNote, deleteNotes, restoreNotes, updateNote } from '../src/db/notes';
 import { createTag, deleteTag } from '../src/db/tags';
 import { buildBackup } from '../src/backup/export';
 import { applyImport, parseBackup } from '../src/backup/import';
@@ -121,6 +121,17 @@ describe('samenvoegen tussen toestellen', () => {
     await mergeFrom(otherDevice({ deletions: [{ id: tag.id, kind: 'tag', deletedAt: later(tag.updatedAt) }] }));
     expect(await db.tags.count()).toBe(0);
     expect((await db.notes.get(n.id))!.tagId).toBeNull();
+  });
+
+  it('ongedaan gemaakt verwijderen overleeft samenvoegen met de verwijdering van elders', async () => {
+    const n = await createNote(input({ title: 'Terug' }));
+    const removed = await deleteNotes([n.id]);
+    // Het andere toestel heeft de verwijdering al overgenomen...
+    const tombstones = await db.deletions.toArray();
+    await restoreNotes(removed);
+    // ...en stuurt die nu terug: de teruggezette notitie moet blijven.
+    await mergeFrom(otherDevice({ deletions: tombstones }));
+    expect((await db.notes.get(n.id))?.title).toBe('Terug');
   });
 
   it('telt bijgewerkte en verwijderde tags in de samenvatting', async () => {

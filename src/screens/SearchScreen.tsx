@@ -1,18 +1,18 @@
 import { useEffect, useMemo, useRef, useState } from 'preact/hooks';
 import { useLiveQuery } from '../db/live';
-import { allNotes, EMPTY_CRITERIA, filterNotes, NO_TAG, sortNotes, type Bounds, type Criteria, type SortMode } from '../db/notes';
+import { allNotes, deleteNotes, EMPTY_CRITERIA, filterNotes, NO_TAG, restoreNotes, sortNotes, type Bounds, type Criteria, type SortMode } from '../db/notes';
 import { allTags } from '../db/tags';
 import type { Note, Rating, Settings, Tag } from '../db/types';
 import { getPosition, getPositionIfAllowed, positionStore } from '../geo/gps';
 import { searchPlace, type PlaceResult } from '../geo/geocode';
-import { fmtNumber, fmtObserved, langStore, t, useLang } from '../i18n';
+import { fmtNumber, fmtObserved, langStore, t, tn, useLang } from '../i18n';
 import { createStore, useStore } from '../lib/store';
 import { TIMES_OF_DAY, daysSince, toLocalIso, type TimeOfDay } from '../lib/time';
 import { navigate } from '../router';
 import { installedStore, installPromptStore, isIOS, lastBackupAt, local, onlineStore, promptInstall, settingsStore, updateSettings } from '../state';
 import { CardWheel } from '../components/CardWheel';
 import { TagFilter } from '../components/TagFilter';
-import { Header, StarInput, Toast } from '../components/common';
+import { Header, Modal, Ratings, StarInput, tagColor, Toast } from '../components/common';
 import { Icon } from '../components/Icon';
 import { IosInstallSteps } from '../components/InstallHelp';
 import { SearchMap, type MapView } from '../components/map/SearchMap';
@@ -57,6 +57,8 @@ export function SearchScreen() {
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [request, setRequest] = useState<{ id: string; seq: number } | null>(null);
   const [toast, setToast] = useState('');
+  const [selecting, setSelecting] = useState(false);
+  const [undo, setUndo] = useState<Note[] | null>(null);
   const mapRef = useRef<L.Map | null>(null);
 
   const { criteria, inMapArea, sort } = state;
@@ -188,9 +190,16 @@ export function SearchScreen() {
               <strong>{results ? t('search.zeroResults') : ''}</strong>
             )}
           </span>
-          <button type="button" class="link sort-btn" onClick={() => patch({ sort: sort === 'rating' ? 'date' : 'rating' })}>
-            ↓ {t(sort === 'rating' ? 'search.sortRating' : 'search.sortDate')}
-          </button>
+          <span class="row gap">
+            {results && results.length > 0 && (
+              <button type="button" class="icon-btn sort-btn" aria-label={t('select.button')} title={t('select.button')} onClick={() => setSelecting(true)}>
+                <Icon name="select" size={20} />
+              </button>
+            )}
+            <button type="button" class="link sort-btn" onClick={() => patch({ sort: sort === 'rating' ? 'date' : 'rating' })}>
+              ↓ {t(sort === 'rating' ? 'search.sortRating' : 'search.sortDate')}
+            </button>
+          </span>
         </div>
         <div class="search-results">
           {results && (
@@ -206,8 +215,81 @@ export function SearchScreen() {
           )}
         </div>
       </div>
+      {selecting && results && (
+        <SelectDialog
+          notes={results}
+          tags={tags}
+          onClose={() => setSelecting(false)}
+          onDelete={async (ids) => {
+            setSelecting(false);
+            setUndo(await deleteNotes(ids));
+          }}
+        />
+      )}
+      {undo && (
+        <Toast
+          key={undo.map((n) => n.id).join()}
+          message={tn('select.deleted', undo.length)}
+          long
+          onDone={() => setUndo(null)}
+          action={{
+            label: t('common.undo'),
+            onClick: () => {
+              restoreNotes(undo);
+              setUndo(null);
+            },
+          }}
+        />
+      )}
       {toast && <Toast message={toast} onDone={() => setToast('')} />}
     </div>
+  );
+}
+
+/* ---------- selectie om in één keer te verwijderen ---------- */
+
+function SelectDialog(props: { notes: Note[]; tags: Map<string, Tag>; onClose: () => void; onDelete: (ids: string[]) => void }) {
+  const { notes, tags, onClose, onDelete } = props;
+  const [picked, setPicked] = useState(() => new Set(notes.map((n) => n.id)));
+  const toggle = (id: string) =>
+    setPicked((s) => {
+      const next = new Set(s);
+      if (!next.delete(id)) next.add(id);
+      return next;
+    });
+  return (
+    <Modal title={t('select.title')} onClose={onClose}>
+      <div class="select-bar">
+        <button type="button" class="btn" onClick={() => setPicked(new Set(notes.map((n) => n.id)))}>
+          {t('select.all')}
+        </button>
+        <button type="button" class="btn" onClick={() => setPicked(new Set())}>
+          {t('select.none')}
+        </button>
+        <span class="grow muted small">{t('select.count', { n: fmtNumber(picked.size), total: fmtNumber(notes.length) })}</span>
+      </div>
+      <ul class="select-list">
+        {notes.map((n) => (
+          <li key={n.id} class={picked.has(n.id) ? '' : 'off'}>
+            <label>
+              <input type="checkbox" checked={picked.has(n.id)} onChange={() => toggle(n.id)} />
+              <span class="dot" style={{ '--c': tagColor(n.tagId ? tags.get(n.tagId) : null) }} />
+              <span class="title">{n.title || n.textPlain.split('\n')[0] || t('note.untitled')}</span>
+              <span class="date">{fmtObserved(n.observedAt, 'dayMonth')}</span>
+              <Ratings note={n} stacked />
+            </label>
+          </li>
+        ))}
+      </ul>
+      <div class="row gap end">
+        <button type="button" class="btn" onClick={onClose}>
+          {t('common.cancel')}
+        </button>
+        <button type="button" class="btn btn-danger" disabled={!picked.size} onClick={() => onDelete(notes.filter((n) => picked.has(n.id)).map((n) => n.id))}>
+          {tn('select.delete', picked.size)}
+        </button>
+      </div>
+    </Modal>
   );
 }
 
