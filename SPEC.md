@@ -88,6 +88,7 @@ interface Tag {
   id: string;              // UUID
   name: string;            // door gebruiker ingevoerd, uniek (hoofdletterongevoelig)
   color: string;           // hex, automatisch uit een vast palet, aanpasbaar
+  template?: string;       // opgeschoonde HTML die klaarstaat in de aantekening als je deze tag kiest
   createdAt: string;
   updatedAt: string;
 }
@@ -193,7 +194,7 @@ Velden, van boven naar beneden:
    - Sneltoetsen voor wie een toetsenbord gebruikt: Ctrl/⌘+B, I, U. Typ je "- " of "1. " aan het begin van een regel, dan begint automatisch een lijst.
    - Plakken van tekst uit andere apps: alle opmaak behalve de toegestane wordt verwijderd.
    - Editor: **Tiptap** (`@tiptap/core` + `starter-kit` + `extension-underline`), framework-onafhankelijk en goed op mobiel. Alles wat niet in de lijst hieronder staat, schakel je uit (koppen, code, citaten, enz.).
-5. **Tag**: een keuzelijst met de bestaande tags, plus *+ Nieuwe tag* om er direct een aan te maken.
+5. **Tag**: een keuzelijst met de bestaande tags, plus *+ Nieuwe tag* om er direct een aan te maken. Heeft de gekozen tag een sjabloon, dan komt dat in de aantekening te staan: direct als die leeg is of nog het onveranderde sjabloon van de vorige tag bevat; anders vraagt de app of het sjabloon de tekst vervangt, eronder komt of niet wordt gebruikt.
 6. **Beoordeling**: 5 tikbare sterren; nogmaals tikken op dezelfde ster wist de beoordeling.
 
 Knoppen: **Opslaan** en **Annuleren** (met bevestiging als er wijzigingen zijn). Bij bewerken is er ook **Verwijderen** (met bevestiging).
@@ -214,7 +215,7 @@ Tijdvakken: nacht 0–6 u, ochtend 6–12 u, middag 12–18 u, avond 18–24 u (
 ### 4.4 Instellingen
 - **Taal:** Systeem / Nederlands / English.
 - **Weergave:** Systeem / Licht / Donker. Een wijziging is direct zichtbaar, zonder herstart.
-- **Tags beheren:** een lijst met naam, kleur en aantal notities. Je kunt tags toevoegen, hernoemen, van kleur veranderen en verwijderen (zie de regel in §3).
+- **Tags beheren:** een lijst met naam, kleur en aantal notities. Je kunt tags toevoegen, hernoemen, van kleur veranderen en verwijderen (zie de regel in §3), en per tag een sjabloon met opmaak vastleggen.
 - **"Zelfde plek"-straal:** een schuifregelaar van 25 tot 500 m (stappen van 25 m, standaard 100 m), met de gekozen waarde ernaast. Notities binnen deze straal tellen als één plek (voor het titelvoorstel en de "beste moment"-analyse).
 - **Back-up en synchronisatie:** knop *Synchroniseren met ander toestel* (opent het sync-scherm, §5a) met "Laatst gesynchroniseerd: …", en daaronder de back-up via een bestand. De back-upherinnering telt zowel export als synchronisatie.
 - **Back-up via bestand:**

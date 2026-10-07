@@ -54,6 +54,14 @@ describe('tags', () => {
     await expect(updateTag(t.id, { name: 'VOGELS' })).rejects.toBeInstanceOf(DuplicateTagError);
   });
 
+  it('bewaart een opgeschoond sjabloon en verwijdert een leeg sjabloon', async () => {
+    const tag = await createTag('Vogels');
+    await updateTag(tag.id, { template: '<p onclick="x">Weer: <script>bad()</script></p><ul><li>Gezien:</li></ul>' });
+    expect((await db.tags.get(tag.id))!.template).toBe('<p>Weer: </p><ul><li>Gezien:</li></ul>');
+    await updateTag(tag.id, { template: '<p></p>' });
+    expect((await db.tags.get(tag.id))!.template).toBeUndefined();
+  });
+
   it('kiest automatisch een andere kleur per tag', async () => {
     const a = await createTag('A');
     const b = await createTag('B');

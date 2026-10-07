@@ -14,6 +14,7 @@ import { Header, Modal, Section, Segmented, Toast } from '../components/common';
 import { Icon } from '../components/Icon';
 import { IosInstallSteps } from '../components/InstallHelp';
 import { TagFilter } from '../components/TagFilter';
+import { RichEditor } from '../components/RichEditor';
 import { navigate } from '../router';
 
 export function SettingsScreen() {
@@ -164,6 +165,7 @@ function TagManager() {
   const [editing, setEditing] = useState<string | null>(null);
   const [adding, setAdding] = useState(false);
   const [removing, setRemoving] = useState<Tag | null>(null);
+  const [templating, setTemplating] = useState<Tag | null>(null);
   const [error, setError] = useState('');
 
   const handle = async (fn: () => Promise<unknown>) => {
@@ -195,6 +197,15 @@ function TagManager() {
               <>
                 <span class="grow">{tag.name}</span>
                 <span class="muted small">{tn('tag.count', counts.get(tag.id) ?? 0)}</span>
+                <button
+                  type="button"
+                  class={`icon-btn${tag.template ? ' has-template' : ''}`}
+                  aria-label={`${t('tag.template')}: ${tag.name}${tag.template ? ` (${t('tag.templateSet')})` : ''}`}
+                  title={t('tag.template')}
+                  onClick={() => setTemplating(tag)}
+                >
+                  <Icon name="template" size={18} />
+                </button>
                 <button type="button" class="icon-btn" aria-label={`${t('tag.rename')}: ${tag.name}`} onClick={() => setEditing(tag.id)}>
                   <Icon name="edit" size={18} />
                 </button>
@@ -216,6 +227,7 @@ function TagManager() {
         </li>
       </ul>
       {error && <p class="error">{error}</p>}
+      {templating && <TemplateDialog tag={templating} onClose={() => setTemplating(null)} />}
       {removing && <DeleteTagDialog tag={removing} tags={tags} count={counts.get(removing.id) ?? 0} onClose={() => setRemoving(null)} />}
     </>
   );
@@ -239,6 +251,42 @@ function NameForm({ initial = '', onSubmit, onCancel }: { initial?: string; onSu
         {t('common.cancel')}
       </button>
     </form>
+  );
+}
+
+function TemplateDialog({ tag, onClose }: { tag: Tag; onClose: () => void }) {
+  const [html, setHtml] = useState(tag.template ?? '');
+  const [key, setKey] = useState(0);
+  return (
+    <Modal title={t('tag.templateTitle', { name: tag.name })} onClose={onClose}>
+      <p class="muted small">{t('tag.templateHint')}</p>
+      <RichEditor key={key} value={html} onChange={setHtml} label={t('tag.template')} />
+      <div class="row gap end">
+        <button
+          type="button"
+          class="btn"
+          onClick={() => {
+            setHtml('');
+            setKey((k) => k + 1);
+          }}
+        >
+          {t('common.clear')}
+        </button>
+        <button type="button" class="btn" onClick={onClose}>
+          {t('common.cancel')}
+        </button>
+        <button
+          type="button"
+          class="btn btn-primary"
+          onClick={async () => {
+            await updateTag(tag.id, { template: html });
+            onClose();
+          }}
+        >
+          {t('common.save')}
+        </button>
+      </div>
+    </Modal>
   );
 }
 

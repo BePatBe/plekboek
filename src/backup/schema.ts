@@ -1,5 +1,6 @@
 import type { Deletion, Note, Rating, Settings, Tag } from '../db/types';
 import { cleanNote } from '../db/notes';
+import { cleanTemplate } from '../db/tags';
 
 export const APP_ID = 'plekboek';
 /** `deletions` is een optionele toevoeging aan versie 1: oudere bestanden zonder dat veld blijven geldig. */
@@ -28,11 +29,12 @@ const optRating = (v: unknown) => v === undefined || v === null || (Number.isInt
 
 export function validateTag(raw: unknown): Tag | null {
   if (!isObj(raw)) return null;
-  const { id, name, color, createdAt, updatedAt } = raw;
-  if (!isStr(id) || !id || !isStr(name) || !name.trim()) return null;
+  const { id, name, color, template, createdAt, updatedAt } = raw;
+  if (!isStr(id) || !id || !isStr(name) || !name.trim() || !optStr(template)) return null;
   if (!isStr(color) || !/^#[0-9a-f]{6}$/i.test(color)) return null;
   if (!isIso(createdAt) || !isIso(updatedAt)) return null;
-  return { id, name: name.trim(), color, createdAt, updatedAt };
+  const tpl = cleanTemplate(template as string | undefined);
+  return { id, name: name.trim(), color, ...(tpl && { template: tpl }), createdAt, updatedAt };
 }
 
 /** Valideert en schoont een notitie op; `text` gaat door DOMPurify en `textPlain` wordt opnieuw berekend. */

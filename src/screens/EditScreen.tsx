@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'preact/hooks';
 import { useLiveQuery } from '../db/live';
 import { allNotes, createNote, deleteNote, getNote, updateNote, type NoteInput } from '../db/notes';
 import { allTags } from '../db/tags';
-import type { Note, Rating } from '../db/types';
+import type { Note, Rating, Tag } from '../db/types';
 import { getPosition, type GpsError } from '../geo/gps';
 import type { LatLng } from '../geo/distance';
 import { suggestTitle, type TitleSuggestion } from '../geo/suggestTitle';
@@ -11,9 +11,10 @@ import { useStore } from '../lib/store';
 import { fromInputs, toInputs, toLocalIso } from '../lib/time';
 import { goBack, navigate } from '../router';
 import { local, onlineStore, settingsStore } from '../state';
-import { Header, NotFound, Section, StarInput, tagColor } from '../components/common';
+import { Header, Modal, NotFound, Section, StarInput, tagColor } from '../components/common';
 import { Icon } from '../components/Icon';
 import { RichEditor } from '../components/RichEditor';
+import { sanitize } from '../text/sanitize';
 import { TagPicker } from '../components/TagPicker';
 import { PinMap } from '../components/map/PinMap';
 import type { L } from '../components/map/leaflet';
@@ -39,6 +40,11 @@ interface Form {
 type GpsState = 'idle' | 'locating' | 'ok' | GpsError;
 
 const draftKey = (id: string | null) => `plekboek-draft:${id ?? 'new'}`;
+
+/** Geen zichtbare tekst (bijv. een lege editor: "<p></p>"). */
+const isBlank = (html: string) => html.replace(/<[^>]*>/g, '').trim() === '';
+/** Zelfde inhoud, ongeacht kleine verschillen die de editor in de HTML maakt. */
+const sameHtml = (a: string, b: string) => sanitize(a) === sanitize(b);
 
 function freshForm(): Form {
   const { date, time } = toInputs(toLocalIso());
@@ -104,6 +110,7 @@ export function EditScreen({ id, params }: { id: string | null; params: URLSearc
   const [titleState, setTitleState] = useState<'idle' | 'loading' | 'offline'>('idle');
   const [retry, setRetry] = useState(0);
   const [saving, setSaving] = useState(false);
+  const [askTemplate, setAskTemplate] = useState<Tag | null>(null);
   const settings = useStore(settingsStore);
   const online = useStore(onlineStore);
   const notes = useLiveQuery(allNotes, []);
@@ -208,10 +215,26 @@ export function EditScreen({ id, params }: { id: string | null; params: URLSearc
     setState((s) => s && { ...s, form: s.base, restored: false });
   };
 
+  /** Tag kiezen; het sjabloon van die tag komt klaar te staan (zie SPEC §4.2, stap 5). */
+  const chooseTag = (tagId: string | null) => {
+    const next = tags.find((x) => x.id === tagId);
+    const prev = tags.find((x) => x.id === form.tagId);
+    if (!next?.template || tagId === form.tagId) return set({ tagId });
+    // Leeg, of nog het onveranderde sjabloon van de vorige tag: er gaat niets verloren.
+    if (isBlank(form.text) || (prev?.template && sameHtml(form.text, prev.template))) return applyTemplate(tagId, next.template);
+    set({ tagId });
+    setAskTemplate(next);
+  };
+
+  const applyTemplate = (tagId: string | null, text: string) => {
+    editorKey.current++;
+    set({ tagId, text });
+  };
+
   const save = async () => {
     const errs: string[] = [];
     if (!pos) errs.push(t('edit.errorLocation'));
-    const hasText = form.text.replace(/<[^>]*>/g, '').trim() !== '';
+    const hasText = !isBlank(form.text);
     if (!hasText && !form.title.trim() && !form.rating && !form.activityRating) errs.push(t('edit.errorContent'));
     setErrors(errs);
     if (errs.length || saving) return;
@@ -346,7 +369,7 @@ export function EditScreen({ id, params }: { id: string | null; params: URLSearc
         </Section>
 
         <Section title={`5 · ${t('edit.tag')}`}>
-          <TagPicker tags={tags} value={form.tagId} onChange={(tagId) => set({ tagId })} />
+          <TagPicker tags={tags} value={form.tagId} onChange={chooseTag} />
           <p class="muted small">{t('edit.tagHint')}</p>
         </Section>
 
@@ -379,6 +402,22 @@ export function EditScreen({ id, params }: { id: string | null; params: URLSearc
           </button>
         )}
       </div>
+      {askTemplate && (
+        <Modal title={t('template.askTitle', { name: askTemplate.name })} onClose={() => setAskTemplate(null)}>
+          <p>{t('template.askText')}</p>
+          <div class="stack">
+            <button type="button" class="btn btn-primary" onClick={() => (applyTemplate(form.tagId, askTemplate.template!), setAskTemplate(null))}>
+              {t('template.replace')}
+            </button>
+            <button type="button" class="btn" onClick={() => (applyTemplate(form.tagId, form.text + askTemplate.template!), setAskTemplate(null))}>
+              {t('template.append')}
+            </button>
+            <button type="button" class="btn" onClick={() => setAskTemplate(null)}>
+              {t('template.skip')}
+            </button>
+          </div>
+        </Modal>
+      )}
     </div>
   );
 }

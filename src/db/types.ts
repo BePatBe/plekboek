@@ -23,6 +23,8 @@ export interface Tag {
   id: string;
   name: string;
   color: string;
+  /** Opgeschoonde HTML die klaarstaat in de aantekening als je deze tag kiest. */
+  template?: string;
   createdAt: string;
   updatedAt: string;
 }

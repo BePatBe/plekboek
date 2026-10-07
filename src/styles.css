@@ -720,6 +720,9 @@ input[type='range'] {
   gap: 14px;
   box-shadow: var(--shadow-strong);
 }
+.icon-btn.has-template {
+  color: var(--accent);
+}
 .modal h2 {
   font-size: 1.15rem;
 }

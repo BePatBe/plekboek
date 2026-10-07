@@ -2,6 +2,7 @@ import { db } from './db';
 import { TAG_PALETTE, type Tag } from './types';
 import { uuid } from '../lib/uuid';
 import { toLocalIso } from '../lib/time';
+import { normalizeText } from '../text/sanitize';
 
 export const allTags = () => db.tags.orderBy('name').toArray();
 
@@ -32,10 +33,16 @@ export async function createTag(name: string, color?: string): Promise<Tag> {
   });
 }
 
-export async function updateTag(id: string, changes: { name?: string; color?: string }): Promise<void> {
+/** Opgeschoond sjabloon; een leeg sjabloon wordt `undefined`. */
+export function cleanTemplate(html: string | undefined): string | undefined {
+  return normalizeText(html ?? '').text || undefined;
+}
+
+export async function updateTag(id: string, changes: { name?: string; color?: string; template?: string }): Promise<void> {
   await db.transaction('rw', db.tags, async () => {
     const patch: Partial<Tag> = { updatedAt: toLocalIso() };
     if (changes.color) patch.color = changes.color;
+    if ('template' in changes) patch.template = cleanTemplate(changes.template);
     if (changes.name !== undefined) {
       const name = changes.name.trim();
       if (!name) throw new Error('Empty tag name');

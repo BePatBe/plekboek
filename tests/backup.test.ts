@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { db } from '../src/db/db';
 import { createNote } from '../src/db/notes';
-import { createTag } from '../src/db/tags';
+import { createTag, updateTag } from '../src/db/tags';
 import { loadSettings, saveSettings } from '../src/db/settings';
 import { buildBackup, backupFileName } from '../src/backup/export';
 import { applyImport, parseBackup } from '../src/backup/import';
@@ -38,6 +38,8 @@ describe('export', () => {
 describe('round-trip', () => {
   it('export → wissen → import levert identieke data op', async () => {
     await seed();
+    const [first] = await db.tags.toArray();
+    await updateTag(first.id, { template: '<p>Weer:</p>' });
     const notes = byId(await db.notes.toArray());
     const tags = byId(await db.tags.toArray());
     const settings = await loadSettings();
@@ -85,14 +87,14 @@ describe('import', () => {
         { ...good, id: 'f', locationSource: 'wifi' },
         'onzin',
       ],
-      tags: [...data.tags, { id: 'x', name: '', color: '#000000' }],
+      tags: [...data.tags, { id: 'x', name: '', color: '#000000' }, { ...data.tags[0], id: 'y', name: 'Z', template: 5 }],
     };
     const parsed = parseBackup(JSON.stringify(raw));
     if (!parsed.ok) throw new Error(parsed.error);
     expect(parsed.data.notes).toHaveLength(1);
     expect(parsed.data.notes[0].text).toBe('<p>ok</p>');
     expect(parsed.data.notes[0].textPlain).toBe('ok');
-    expect(parsed.data.invalid).toBe(8);
+    expect(parsed.data.invalid).toBe(9);
   });
 
   it('samenvoegen: nieuwste updatedAt wint en tags met dezelfde naam worden samengevoegd', async () => {
